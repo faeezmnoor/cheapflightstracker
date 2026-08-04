@@ -1,0 +1,9 @@
+# Google Flights data source (no API key needed).
+# Pinned because fast-flights' API and page-parsing have changed across
+# versions; 3.0.2 is what this code targets.
+fast-flights==3.0.2
+# fast-flights imports typing_extensions but doesn't always declare it.
+typing_extensions>=4.9
+
+# Everything else (baseline, detector, emailer, scheduler) is Python stdlib.
+# The 'mock' provider and the whole test suite run with zero dependencies.

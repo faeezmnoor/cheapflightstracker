@@ -1,0 +1,73 @@
+name: Daily flight deals (KL -> Indonesia)
+
+# Runs every day and emails you the underpriced fares.
+# 01:00 UTC == 09:00 Malaysia time (UTC+8) — a morning digest.
+# You can also trigger it by hand from the Actions tab (Run workflow).
+on:
+  schedule:
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print the email instead of sending it"
+        type: boolean
+        default: false
+
+# Needed so the job can commit the updated price-history baseline back.
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-flight-deals
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run the daily scan
+        env:
+          PROVIDER: googleflights   # Google Flights via fast-flights, no API key
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_APP_PASSWORD: ${{ secrets.SMTP_APP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO || secrets.SMTP_USER }}
+          EMAIL_FROM: ${{ secrets.SMTP_USER }}
+          CURRENCY: ${{ vars.CURRENCY || 'MYR' }}
+          # Optional overrides (set as repo Variables to tune without code edits):
+          ROUTES: ${{ vars.ROUTES }}
+          DEPARTURE_OFFSETS: ${{ vars.DEPARTURE_OFFSETS }}
+          ROUND_TRIP: ${{ vars.ROUND_TRIP }}
+          STAY_LENGTHS: ${{ vars.STAY_LENGTHS }}
+          DEAL_THRESHOLD: ${{ vars.DEAL_THRESHOLD }}
+          SEVERE_THRESHOLD: ${{ vars.SEVERE_THRESHOLD }}
+          MIN_SAMPLES: ${{ vars.MIN_SAMPLES }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: python run.py
+
+      - name: Commit updated price history
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          git config user.name "flight-deals-bot"
+          git config user.email "actions@github.com"
+          git add data/price_history.json
+          if git diff --staged --quiet; then
+            echo "No history changes to commit."
+          else
+            git commit -m "chore: update flight price history [skip ci]"
+            # Retry the push a few times to ride out transient failures.
+            for i in 1 2 3 4; do
+              if git push; then break; fi
+              echo "push failed, retrying in $((2**i))s"; sleep $((2**i))
+            done
+          fi
