@@ -1,7 +1,7 @@
 import os
 import sys
 import unittest
-from datetime import date
+from datetime import date, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -21,13 +21,16 @@ def _cfg(**kw):
     return c
 
 
-def _history(dest, prices, observed="2026-08-01"):
+def _history(dest, prices, observed=None):
+    """Baselines are built from the cheapest fare per day, so give each price
+    its own observation date unless a specific one is requested."""
     recs = []
-    for p in prices:
+    for i, p in enumerate(prices):
         recs.append({
             "origin": "KUL", "destination": dest, "departure_date": "2026-09-01",
             "price": p, "currency": "MYR", "trip_type": "one_way",
-            "observed_date": observed,
+            "observed_date": (observed
+                              or (date(2026, 7, 1) + timedelta(days=i)).isoformat()),
         })
     return recs
 
@@ -86,6 +89,41 @@ class DetectorTest(unittest.TestCase):
         deals, summaries = find_deals({"KUL-CGK": []}, hist, [self.route], _cfg(), self.today)
         self.assertEqual(deals, [])
         self.assertIsNone(summaries[0].cheapest)
+
+    def test_round_trip_history_does_not_make_one_ways_look_cheap(self):
+        """Regression from the first live run: history holds both one-way and
+        round-trip fares. Pooling them put 'usual' between the two, so ordinary
+        one-ways were reported as ~45% off and flagged SEVERE every day."""
+        hist = _history("CGK", [340, 350, 342, 338, 345])            # one-way
+        rt = _history("CGK", [900, 920, 890, 910, 905])              # round-trip
+        for r in rt:
+            r["trip_type"] = "round_trip"
+        hist += rt
+
+        # A perfectly ordinary one-way fare.
+        offers = {"KUL-CGK": [_offer("CGK", 342)]}
+        deals, summaries = find_deals(offers, hist, [self.route], _cfg(), self.today)
+        self.assertEqual(deals, [], "ordinary one-way must not be flagged")
+        # Baseline used is the one-way one (~342), not a pooled ~600.
+        self.assertEqual(summaries[0].baseline.trip_type, "one_way")
+        self.assertLess(summaries[0].baseline.median, 400)
+
+    def test_round_trip_offer_uses_round_trip_baseline(self):
+        hist = _history("CGK", [340, 350, 342, 338, 345])
+        rt = _history("CGK", [900, 920, 890, 910, 905])
+        for r in rt:
+            r["trip_type"] = "round_trip"
+        hist += rt
+
+        cheap_rt = Offer(origin="KUL", destination="CGK",
+                         departure_date="2026-09-10", return_date="2026-09-24",
+                         price=500, currency="MYR", trip_type="round_trip")
+        deals, _ = find_deals({"KUL-CGK": [cheap_rt]}, hist, [self.route],
+                              _cfg(), self.today)
+        self.assertEqual(len(deals), 1)
+        self.assertEqual(deals[0].baseline.trip_type, "round_trip")
+        self.assertEqual(deals[0].baseline.median, 905)
+        self.assertEqual(deals[0].severity, "severe")   # 500 vs 905 usual
 
     def test_deals_sorted_by_discount(self):
         routes = [Route("KUL", "CGK", "Jakarta"), Route("KUL", "DPS", "Bali")]

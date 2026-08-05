@@ -37,10 +37,16 @@ class Offer:
 
 @dataclass
 class Baseline:
-    """The "usual price" for a route, derived from recent history."""
+    """The "usual price" for a route *and trip type*, from recent history.
+
+    One-way and round-trip fares must never share a baseline: a return ticket
+    costs roughly double, so pooling them puts the median between the two and
+    makes every one-way look ~50% underpriced.
+    """
 
     route_key: str
     samples: int
+    trip_type: str = "one_way"
     median: Optional[float] = None
     mean: Optional[float] = None
     p25: Optional[float] = None

@@ -11,7 +11,7 @@ import json
 import os
 import statistics
 from datetime import date, datetime, timedelta
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from .models import Baseline, Offer
 
@@ -98,35 +98,56 @@ def _percentile(values: List[float], pct: float) -> Optional[float]:
     return ordered[low] + (ordered[high] - ordered[low]) * frac
 
 
-def compute_baseline(records: List[dict], route_key: str,
+def compute_baseline(records: List[dict], route_key: str, trip_type: str,
                     window_days: int, as_of: date) -> Baseline:
-    """The typical price for a route from observations in the trailing window.
+    """The typical price for a route + trip type in the trailing window.
+
+    ``trip_type`` ("one_way" / "round_trip") is part of the key, not a filter
+    applied afterwards: a return fare is roughly twice a one-way, so mixing
+    them yields a median that flags every one-way as a bargain.
+
+    Each day is reduced to its *cheapest* observed fare before the statistics
+    are taken, so ``samples`` counts days of history, not raw observations.
+    That keeps the comparison like-for-like: we alert on today's cheapest fare,
+    so "usual" must mean the usual cheapest fare. Averaging over every offer we
+    ever stored (which includes 2nd- and 3rd-best options) would sit well above
+    the daily low and make an ordinary cheapest fare look like a discount every
+    single day.
 
     Note: pass history that does *not* include today's observations so the
     baseline represents the *usual* price to compare today's fares against.
     """
     cutoff = as_of - timedelta(days=window_days)
-    prices: List[float] = []
+    cheapest_per_day: Dict[date, float] = {}
     for rec in records:
         if rec.get("origin") is None:
             continue
         rk = f"{rec.get('origin')}-{rec.get('destination')}"
         if rk != route_key:
             continue
+        # Older records predate trip_type; treat them as one-way (what the
+        # scanner recorded first) rather than silently pooling them.
+        if (rec.get("trip_type") or "one_way") != trip_type:
+            continue
         observed = _parse_date(rec.get("observed_date"))
         if observed is None or observed < cutoff or observed > as_of:
             continue
         try:
-            prices.append(float(rec["price"]))
+            price = float(rec["price"])
         except (KeyError, TypeError, ValueError):
             continue
+        best = cheapest_per_day.get(observed)
+        if best is None or price < best:
+            cheapest_per_day[observed] = price
 
+    prices: List[float] = list(cheapest_per_day.values())
     if not prices:
-        return Baseline(route_key=route_key, samples=0)
+        return Baseline(route_key=route_key, samples=0, trip_type=trip_type)
 
     return Baseline(
         route_key=route_key,
         samples=len(prices),
+        trip_type=trip_type,
         median=round(statistics.median(prices), 2),
         mean=round(statistics.fmean(prices), 2),
         p25=round(_percentile(prices, 0.25), 2),
@@ -135,9 +156,15 @@ def compute_baseline(records: List[dict], route_key: str,
     )
 
 
+TRIP_TYPES = ("one_way", "round_trip")
+
+
 def baselines_by_route(records: List[dict], route_keys: Iterable[str],
-                       window_days: int, as_of: date) -> Dict[str, Baseline]:
+                       window_days: int, as_of: date
+                       ) -> Dict[Tuple[str, str], Baseline]:
+    """Baselines keyed by (route_key, trip_type)."""
     return {
-        rk: compute_baseline(records, rk, window_days, as_of)
+        (rk, tt): compute_baseline(records, rk, tt, window_days, as_of)
         for rk in route_keys
+        for tt in TRIP_TYPES
     }

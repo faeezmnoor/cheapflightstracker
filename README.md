@@ -22,11 +22,24 @@ Every morning (09:00 Malaysia time) an email like this:
 > - **KL → Jakarta** — **MYR 247** · 30% off · save MYR 107 *(1 stop)*
 > - …plus a **cheapest-today table** for every route.
 
-Deals are found by comparing today's cheapest fare against the **median of that
-route's recently-observed fares**. A fare ≥20% below usual is a **deal**; ≥35%
-below is **severely underpriced**. The baseline lives in
-[`data/price_history.json`](data/price_history.json) and is committed back after
-each run, so it gets smarter every day.
+### How "underpriced" is decided
+
+A fare is compared against **its own like-for-like baseline**, built from
+[`data/price_history.json`](data/price_history.json) (committed back after each
+run, so it sharpens daily). Two rules make the comparison honest:
+
+1. **One-way and round-trip never share a baseline.** A return ticket costs
+   roughly double; pooling them puts "usual" between the two and makes every
+   one-way look ~50% underpriced.
+2. **"Usual" means the usual *cheapest* fare.** Each day of history is reduced
+   to its lowest fare before taking the median. We alert on today's cheapest,
+   so the baseline must be built from daily lows — averaging over every offer
+   ever stored (including 2nd- and 3rd-best) sits above the daily low and would
+   flag an ordinary fare as a bargain every single day.
+
+A fare ≥20% below that baseline is a **deal**; ≥35% below is **severely
+underpriced**. `MIN_SAMPLES` (default 5) is counted in **days of history**, so
+nothing is flagged during roughly the first week while the baseline forms.
 
 ---
 
@@ -147,8 +160,8 @@ back) before scaling up.
   emails what it has) and usually recovers next run. You can set an `FF_PROXY`
   env var to route the fetcher through a proxy if this becomes persistent.
 - **Baseline needs a few days.** Until a route has `MIN_SAMPLES` (default 5)
-  observations, it shows "building baseline" and won't flag deals — by design,
-  to avoid false alarms on thin data.
+  *days* of history, it shows "building baseline" and won't flag deals — by
+  design, to avoid false alarms on thin data.
 - **Always verify before booking.** The email links to Google Flights for each
   deal; treat the alert as a heads-up, not a booking.
 - **Swapping providers** is a one-file job — implement `FlightProvider.search`
