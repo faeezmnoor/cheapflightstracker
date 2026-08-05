@@ -87,5 +87,63 @@ class GoogleFlightsMappingTest(unittest.TestCase):
         self.assertEqual(p.search("KUL", "SUB", "2026-09-05"), [])
 
 
+@unittest.skipUnless(HAS_FF, "fast-flights not installed")
+class LenientParserTest(unittest.TestCase):
+    """The library's parser dies on routes whose pages omit the airline
+    metadata block (observed on KUL->JOG and KUL->BDO). We only need price,
+    airlines and leg count, so parse those pages leniently instead."""
+
+    @staticmethod
+    def _page(payload):
+        import json
+        return ('<html><body><script class="ds:1">AF_initDataCallback({key: '
+                "'ds:1', data:" + json.dumps(payload) +
+                ", sideChannel: {}});</script></body></html>")
+
+    @staticmethod
+    def _itin(price, n_legs, airlines):
+        leg = [None, None, None, "KUL", "Kuala Lumpur", "Dest", "JOG", None,
+               [7, 30], None, [9, 45], 125, None, None, None, None, None,
+               "Airbus A320", None, None, [2026, 9, 9], [2026, 9, 9]]
+        return [["type", airlines, [leg] * n_legs, *([None] * 19), [None] * 9],
+                [[None, price]]]
+
+    def test_recovers_when_metadata_block_is_missing(self):
+        from flightdeals.providers.googleflights import _parse_itineraries
+        # payload[7] is None -> the exact shape that breaks the library parser
+        payload = [None, None, None,
+                   [[self._itin(342, 1, ["AK"]), self._itin(455, 2, ["JT"])]],
+                   None, None, None, None]
+        got = _parse_itineraries(self._page(payload))
+        self.assertEqual([i.price for i in got], [342.0, 455.0])
+        self.assertEqual(len(got[0].flights), 1)   # direct
+        self.assertEqual(len(got[1].flights), 2)   # 1 stop
+        self.assertEqual(got[0].airlines, ["AK"])
+
+    def test_library_really_fails_on_that_shape(self):
+        # Guards the premise: if a future fast-flights handles this, the
+        # salvage path is no longer needed and this test will flag it.
+        from fast_flights.parser import parse as lib_parse
+        payload = [None, None, None, [[self._itin(342, 1, ["AK"])]],
+                   None, None, None, None]
+        with self.assertRaises(Exception):
+            lib_parse(self._page(payload))
+
+    def test_tolerates_junk(self):
+        from flightdeals.providers.googleflights import _parse_itineraries
+        self.assertEqual(_parse_itineraries("<html></html>"), [])
+        self.assertEqual(_parse_itineraries(self._page([None, None, None, [None]])), [])
+        # malformed entries are skipped, not fatal
+        self.assertEqual(_parse_itineraries(self._page([None, None, None, [[["x"], None]]])), [])
+
+    def test_skips_zero_price_and_legless(self):
+        from flightdeals.providers.googleflights import _parse_itineraries
+        payload = [None, None, None,
+                   [[self._itin(0, 1, ["AK"]), self._itin(200, 0, ["AK"]),
+                     self._itin(310, 1, ["AK"])]], None, None, None, None]
+        got = _parse_itineraries(self._page(payload))
+        self.assertEqual([i.price for i in got], [310.0])
+
+
 if __name__ == "__main__":
     unittest.main()
