@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import smtplib
 import ssl
+from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from html import escape
@@ -38,6 +39,30 @@ def _stops_desc(offer: Offer) -> str:
     if offer.stops is None:
         return ""
     return "direct" if offer.stops == 0 else f"{offer.stops} stop(s)"
+
+
+def _short_date(value: Optional[str]) -> str:
+    """'2026-09-09' -> '9 Sep'. Falls back to the raw string if unparseable."""
+    if not value:
+        return ""
+    try:
+        parsed = datetime.strptime(value[:10], "%Y-%m-%d")
+    except ValueError:
+        return value
+    return f"{parsed.day} {parsed.strftime('%b')}"
+
+
+def _short_when(offer: Offer) -> str:
+    """Compact date + trip type for the digest table.
+
+    The trip type must be visible: a return fare costs about double a one-way,
+    so an unlabelled round-trip price in a column of one-ways reads as a route
+    being wildly expensive.
+    """
+    if offer.return_date:
+        return (f"{_short_date(offer.departure_date)} → "
+                f"{_short_date(offer.return_date)} · return")
+    return f"{_short_date(offer.departure_date)} · one-way"
 
 
 # --------------------------------------------------------------------------- #
@@ -156,7 +181,7 @@ def _summary_row(s: RouteSummary, currency: str) -> str:
     if not s.cheapest:
         return (f'<tr><td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;">'
                 f'KL &rarr; {escape(s.city)}</td>'
-                f'<td colspan="3" style="padding:8px 12px;color:#999;'
+                f'<td colspan="4" style="padding:8px 12px;color:#999;'
                 f'border-bottom:1px solid #f0f0f0;">no offers</td></tr>')
     o = s.cheapest
     usual = (_money(s.baseline.median, currency)
@@ -170,7 +195,10 @@ def _summary_row(s: RouteSummary, currency: str) -> str:
         f'<td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;">'
         f'KL &rarr; {escape(s.city)}</td>'
         f'<td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;'
-        f'font-weight:700;">{escape(_money(o.price, currency))}</td>'
+        f'font-weight:700;white-space:nowrap;">{escape(_money(o.price, currency))}</td>'
+        f'<td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;'
+        f'color:#666;font-size:13px;white-space:nowrap;">'
+        f'{escape(_short_when(o))}</td>'
         f'<td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;'
         f'color:{disc_color};">{escape(disc)}</td>'
         f'<td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;'
@@ -224,6 +252,8 @@ def build_html(result: RunResult) -> str:
           <th align="left" style="padding:8px 12px;font-size:12px;color:#888;
               border-bottom:1px solid #eee;">Cheapest</th>
           <th align="left" style="padding:8px 12px;font-size:12px;color:#888;
+              border-bottom:1px solid #eee;">When</th>
+          <th align="left" style="padding:8px 12px;font-size:12px;color:#888;
               border-bottom:1px solid #eee;">Off usual</th>
           <th align="left" style="padding:8px 12px;font-size:12px;color:#888;
               border-bottom:1px solid #eee;">Usual</th>
@@ -233,9 +263,10 @@ def build_html(result: RunResult) -> str:
     </td></tr>
 
     <tr><td style="padding:22px 0 8px;font-size:12px;color:#aaa;line-height:1.6;">
-      A fare is flagged when it drops well below its recent median for that
-      route. Baselines strengthen as history accumulates. Fares via Google
-      Flights; always verify and book with the airline.
+      A fare is flagged when it drops well below the usual <em>cheapest</em>
+      fare for that route and trip type (one-way and return are compared
+      separately). Baselines strengthen as history accumulates. Fares via
+      Google Flights; always verify and book with the airline.
     </td></tr>
   </table>
 </td></tr></table>

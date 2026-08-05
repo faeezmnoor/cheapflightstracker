@@ -78,6 +78,33 @@ class EmailTest(unittest.TestCase):
         html = build_html(self._result(False))
         self.assertIn("No underpriced flights today", html)
 
+    def test_summary_table_labels_trip_type_and_date(self):
+        """Regression: the digest table showed a round-trip price in the same
+        column as one-way fares with no label, so a return fare read as the
+        route simply being twice as expensive."""
+        one_way = Offer("KUL", "CGK", "2026-09-09", 342.0, "MYR", "one_way")
+        ret = Offer("KUL", "UPG", "2026-09-09", 960.0, "MYR", "round_trip",
+                    return_date="2026-09-23")
+        b = Baseline("KUL-CGK", 0)
+        result = RunResult("2026-08-05", "MYR", [], [
+            RouteSummary("KUL-CGK", "Jakarta", one_way, b, None),
+            RouteSummary("KUL-UPG", "Makassar", ret, b, None),
+        ], 205, [])
+        html = build_html(result)
+        self.assertIn("9 Sep · one-way", html)
+        self.assertIn("9 Sep → 23 Sep · return", html)
+        self.assertIn(">When<", html)
+
+    def test_no_offers_row_spans_all_columns(self):
+        b = Baseline("KUL-JOG", 0)
+        result = RunResult("2026-08-05", "MYR", [], [
+            RouteSummary("KUL-JOG", "Yogyakarta", None, b, None),
+        ], 0, [])
+        html = build_html(result)
+        # 5 columns now (Route, Cheapest, When, Off usual, Usual)
+        self.assertIn('colspan="4"', html)
+        self.assertIn("no offers", html)
+
 
 class EndToEndMockTest(unittest.TestCase):
     def test_full_pipeline_runs(self):
