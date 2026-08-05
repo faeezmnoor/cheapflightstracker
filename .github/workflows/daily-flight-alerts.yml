@@ -1,4 +1,5 @@
 name: Daily flight deals (KL -> Indonesia)
+# Scans KL -> Indonesia fares daily and emails the underpriced ones.
 
 # Runs every day and emails you the underpriced fares.
 # 01:00 UTC == 09:00 Malaysia time (UTC+8) — a morning digest.
