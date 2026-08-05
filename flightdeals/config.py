@@ -131,9 +131,12 @@ class Config:
 
     # --- Provider / infra -------------------------------------------------- #
     provider: str = "googleflights"     # "googleflights" | "mock"
-    fetch_retries: int = 3              # retries on a failed Google fetch
+    fetch_retries: int = 4              # retries on a failed Google fetch
     fetch_proxy: str | None = None      # optional proxy URL for the fetcher
-    request_pause_seconds: float = 1.0   # be gentle between Google requests
+    # Google throttles bursts hard: at ~1s spacing roughly a third of searches
+    # failed. Pausing longer (plus jitter in search.py) trades a slower run for
+    # far better coverage — a daily job has all the time it needs.
+    request_pause_seconds: float = 3.0
 
     # --- Email ------------------------------------------------------------- #
     smtp_host: str = "smtp.gmail.com"
@@ -179,9 +182,9 @@ class Config:
             min_samples=_get_int("MIN_SAMPLES", 5),
             history_window_days=_get_int("HISTORY_WINDOW_DAYS", 90),
             provider=_get("PROVIDER", "googleflights"),
-            fetch_retries=_get_int("FETCH_RETRIES", 3),
+            fetch_retries=_get_int("FETCH_RETRIES", 4),
             fetch_proxy=_get("FF_PROXY"),
-            request_pause_seconds=_get_float("REQUEST_PAUSE_SECONDS", 1.0),
+            request_pause_seconds=_get_float("REQUEST_PAUSE_SECONDS", 3.0),
             smtp_host=_get("SMTP_HOST", "smtp.gmail.com"),
             smtp_port=_get_int("SMTP_PORT", 465),
             smtp_user=smtp_user,

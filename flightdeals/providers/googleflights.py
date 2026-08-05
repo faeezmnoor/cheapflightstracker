@@ -17,6 +17,7 @@ Pinned to fast-flights==3.0.2 (see requirements.txt); the API used here:
 
 from __future__ import annotations
 
+import random
 import time
 from typing import List, Optional
 
@@ -118,7 +119,11 @@ class GoogleFlightsProvider(FlightProvider):
                 return []
             except Exception as exc:  # noqa: BLE001 - network / parse hiccups
                 last_exc = exc
-                time.sleep(1.5 * (attempt + 1))
+                if attempt + 1 < self.config.fetch_retries:
+                    # Exponential backoff with jitter — throttling clears with
+                    # time, and retrying immediately just deepens the block.
+                    delay = 3.0 * (2 ** attempt) + random.uniform(0, 2.0)
+                    time.sleep(delay)
         raise ProviderError(f"Google Flights fetch failed: {last_exc}")
 
     @staticmethod

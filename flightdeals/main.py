@@ -30,6 +30,15 @@ def run(config: Config, today: date | None = None) -> RunResult:
     offers_by_route, errors = run_searches(provider, config, today)
     offers_checked = sum(len(v) for v in offers_by_route.values())
     print(f"[scan] collected {offers_checked} offers, {len(errors)} error(s)")
+    # Surface a sample of failures so throttling/parse breakage is diagnosable
+    # from the run log instead of just showing up as a missing route.
+    for err in errors[:8]:
+        print(f"[scan]   ! {err}")
+    if len(errors) > 8:
+        print(f"[scan]   ! ...and {len(errors) - 8} more")
+    empty = [r.label for r in config.routes if not offers_by_route.get(r.key)]
+    if empty:
+        print(f"[scan] routes with no offers: {', '.join(empty)}")
 
     # Baseline must reflect the PRIOR history, so load & evaluate before appending.
     history = load_history(config.history_path)

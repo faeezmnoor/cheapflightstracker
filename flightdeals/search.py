@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 import time
 from datetime import date, timedelta
 from typing import Dict, List, Optional, Tuple
@@ -61,7 +62,10 @@ def run_searches(
                 errors.append(f"{route.key} {dep}->{ret or 'oneway'}: {exc}")
             except Exception as exc:  # noqa: BLE001 - never let one route kill the run
                 errors.append(f"{route.key} {dep}->{ret or 'oneway'}: {exc!r}")
+            # Jittered spacing: an exactly-periodic request pattern is an easy
+            # bot signature, and bursts get throttled.
             if config.request_pause_seconds > 0:
-                time.sleep(config.request_pause_seconds)
+                base = config.request_pause_seconds
+                time.sleep(base + random.uniform(0, base * 0.6))
 
     return offers_by_route, errors
