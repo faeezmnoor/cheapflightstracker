@@ -25,9 +25,9 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    # Searches are deliberately paced to avoid throttling (~5-10 min typical);
-    # this cap just stops a wedged run from burning Actions minutes.
-    timeout-minutes: 45
+    # Exhaustive scanning (every date in the window) paced to avoid
+    # throttling runs ~50 min for 10 routes; this cap only stops a wedged run.
+    timeout-minutes: 180
     steps:
       - name: Checkout
         uses: actions/checkout@v4

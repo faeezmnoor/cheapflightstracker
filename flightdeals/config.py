@@ -114,22 +114,25 @@ class Config:
     nonstop_only: bool = False          # direct flights are fine but not required
     max_offers_per_search: int = 3
 
-    # One-way departure dates to probe, as "days from today". Google prices
-    # each date separately, so a date we don't probe is a price we can't see —
-    # sampling only a couple of dates means "cheapest" really means "cheapest
-    # of the two days we looked at". Sampled densely near-term (cheap fares
-    # soon are the point) and thinning out further ahead.
+    # One-way departures: EVERY date in the window, not a sample. Google prices
+    # each date separately, so an unprobed date is a price we cannot see, and
+    # sampling means "cheapest" only ever meant "cheapest of the days we
+    # happened to look at". Window is the next 30 days.
+    departure_window_days: int = 30
+    departure_start_offset: int = 1
     departure_offsets: List[int] = field(
-        default_factory=lambda: [7, 11, 15, 19, 23, 27, 31, 38, 45, 60]
+        default_factory=lambda: list(range(1, 31))
     )
 
-    # Round trips are probed on their own (smaller) set of departure dates,
-    # since each one costs another request. Returns stay within max_trip_days.
+    # Round trips still sample: pairing every departure with every stay length
+    # is quadratic, and one-way coverage is what finds underpriced fares.
+    # Returns are allowed to land past the departure window, capped by
+    # max_trip_days (the "30 days from go to from date" rule).
     round_trip: bool = True
     round_trip_offsets: List[int] = field(
-        default_factory=lambda: [14, 21, 35, 50]
+        default_factory=lambda: list(range(2, 31, 3))
     )
-    stay_lengths: List[int] = field(default_factory=lambda: [14])
+    stay_lengths: List[int] = field(default_factory=lambda: [7, 14])
     max_trip_days: int = 30
 
     # --- What counts as a "deal" ------------------------------------------ #
@@ -179,6 +182,8 @@ class Config:
         ]
 
         smtp_user = _get("SMTP_USER")
+        window = _get_int("DEPARTURE_WINDOW_DAYS", 30)
+        start = _get_int("DEPARTURE_START_OFFSET", 1)
         return cls(
             origin=origin,
             routes=routes,
@@ -186,11 +191,16 @@ class Config:
             adults=_get_int("ADULTS", 1),
             nonstop_only=_get_bool("NONSTOP_ONLY", False),
             max_offers_per_search=_get_int("MAX_OFFERS_PER_SEARCH", 3),
+            departure_window_days=window,
+            departure_start_offset=start,
+            # Explicit DEPARTURE_OFFSETS still wins; otherwise scan every date
+            # in [start, window] so coverage is exhaustive rather than sampled.
             departure_offsets=_get_int_list(
-                "DEPARTURE_OFFSETS", [7, 11, 15, 19, 23, 27, 31, 38, 45, 60]),
+                "DEPARTURE_OFFSETS", list(range(start, window + 1))),
             round_trip=_get_bool("ROUND_TRIP", True),
-            round_trip_offsets=_get_int_list("ROUND_TRIP_OFFSETS", [14, 21, 35, 50]),
-            stay_lengths=_get_int_list("STAY_LENGTHS", [14]),
+            round_trip_offsets=_get_int_list(
+                "ROUND_TRIP_OFFSETS", list(range(start + 1, window + 1, 3))),
+            stay_lengths=_get_int_list("STAY_LENGTHS", [7, 14]),
             max_trip_days=_get_int("MAX_TRIP_DAYS", 30),
             deal_threshold=_get_float("DEAL_THRESHOLD", 0.20),
             severe_threshold=_get_float("SEVERE_THRESHOLD", 0.35),
