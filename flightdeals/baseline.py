@@ -63,6 +63,23 @@ def prune_history(records: List[dict], keep_days: int, today: date) -> List[dict
     return kept
 
 
+def daily_cheapest(offers: Iterable[Offer]) -> List[Offer]:
+    """Reduce a day's offers to the cheapest per (route, trip type).
+
+    Exhaustive scanning produces thousands of offers a day; persisting them all
+    would grow the committed history into tens of megabytes within months. The
+    baseline only ever uses each day's cheapest fare, so storing just that
+    loses nothing it depends on.
+    """
+    best: Dict[tuple, Offer] = {}
+    for offer in offers:
+        key = (offer.route_key, offer.trip_type)
+        current = best.get(key)
+        if current is None or offer.price < current.price:
+            best[key] = offer
+    return sorted(best.values(), key=lambda o: (o.route_key, o.trip_type))
+
+
 def append_observations(records: List[dict], offers: Iterable[Offer],
                         observed_date: str) -> List[dict]:
     for offer in offers:

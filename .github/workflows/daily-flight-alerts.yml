@@ -1,7 +1,6 @@
 name: Daily flight deals (KL -> Indonesia)
 # Scans KL -> Indonesia fares daily and emails the underpriced ones.
 
-# Runs every day and emails you the underpriced fares.
 # 01:00 UTC == 09:00 Malaysia time (UTC+8) — a morning digest.
 # You can also trigger it by hand from the Actions tab (Run workflow).
 on:
@@ -14,7 +13,7 @@ on:
         type: boolean
         default: false
 
-# Needed so the job can commit the updated price-history baseline back.
+# Needed so the report job can commit the updated price-history baseline back.
 permissions:
   contents: write
 
@@ -22,42 +21,83 @@ concurrency:
   group: daily-flight-deals
   cancel-in-progress: false
 
+env:
+  SHARDS: 4
+
 jobs:
+  # Scanning is split across parallel shards: 26 routes x 30 departure dates is
+  # ~780 searches, which is hours in one process. Each shard also gets its own
+  # runner IP, which keeps the per-IP request rate well clear of throttling.
   scan:
     runs-on: ubuntu-latest
-    # Exhaustive scanning (every date in the window) paced to avoid
-    # throttling runs ~50 min for 10 routes; this cap only stops a wedged run.
-    timeout-minutes: 180
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false      # one bad shard must not sink the whole digest
+      matrix:
+        shard: [0, 1, 2, 3]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - run: pip install -r requirements.txt
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Run the daily scan
+      - name: Scan shard ${{ matrix.shard }}
         env:
-          PROVIDER: googleflights   # Google Flights via fast-flights, no API key
+          PROVIDER: googleflights
+          CURRENCY: ${{ vars.CURRENCY || 'MYR' }}
+          REGION: ${{ vars.REGION || 'my' }}
+          LANGUAGE: ${{ vars.LANGUAGE || 'en' }}
+          ROUTES: ${{ vars.ROUTES }}
+          DEPARTURE_WINDOW_DAYS: ${{ vars.DEPARTURE_WINDOW_DAYS }}
+          DEPARTURE_OFFSETS: ${{ vars.DEPARTURE_OFFSETS }}
+          ROUND_TRIP: ${{ vars.ROUND_TRIP }}
+          ROUND_TRIP_OFFSETS: ${{ vars.ROUND_TRIP_OFFSETS }}
+          STAY_LENGTHS: ${{ vars.STAY_LENGTHS }}
+        run: >
+          python run.py
+          --shard ${{ matrix.shard }} --shards ${{ env.SHARDS }}
+          --output observations/obs-${{ matrix.shard }}.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: observations-${{ matrix.shard }}
+          path: observations/obs-${{ matrix.shard }}.json
+          if-no-files-found: warn
+
+  # Merge every shard, compare against history, email, and commit the baseline.
+  report:
+    needs: scan
+    if: always()          # still report on whatever shards did succeed
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: observations-*
+          path: observations
+          merge-multiple: true
+
+      - name: Build and send the digest
+        env:
+          PROVIDER: googleflights
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_APP_PASSWORD: ${{ secrets.SMTP_APP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO || secrets.SMTP_USER }}
           EMAIL_FROM: ${{ secrets.SMTP_USER }}
           CURRENCY: ${{ vars.CURRENCY || 'MYR' }}
-          # Optional overrides (set as repo Variables to tune without code edits):
           ROUTES: ${{ vars.ROUTES }}
-          DEPARTURE_OFFSETS: ${{ vars.DEPARTURE_OFFSETS }}
-          ROUND_TRIP: ${{ vars.ROUND_TRIP }}
-          STAY_LENGTHS: ${{ vars.STAY_LENGTHS }}
           DEAL_THRESHOLD: ${{ vars.DEAL_THRESHOLD }}
           SEVERE_THRESHOLD: ${{ vars.SEVERE_THRESHOLD }}
           MIN_SAMPLES: ${{ vars.MIN_SAMPLES }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
-        run: python run.py
+        run: python run.py --report "observations/*.json"
 
       - name: Commit updated price history
         if: ${{ github.event.inputs.dry_run != 'true' }}
@@ -69,9 +109,10 @@ jobs:
             echo "No history changes to commit."
           else
             git commit -m "chore: update flight price history [skip ci]"
-            # Retry the push a few times to ride out transient failures.
+            # Rebase before pushing in case another run landed meanwhile.
             for i in 1 2 3 4; do
               if git push; then break; fi
               echo "push failed, retrying in $((2**i))s"; sleep $((2**i))
+              git pull --rebase origin "${GITHUB_REF_NAME}" || true
             done
           fi

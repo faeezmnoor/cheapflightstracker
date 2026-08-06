@@ -60,33 +60,59 @@ def _get_int_list(name: str, default: List[int]) -> List[int]:
 # Destinations: every reasonably-served airport in Indonesia from KL.
 # IATA code -> human-friendly city label.
 # --------------------------------------------------------------------------- #
+# Every Indonesian airport confirmed reachable from KL by
+# scripts/probe_destinations.py (49 candidates probed, 26 reachable).
+# Airports with no KL service at all are deliberately absent — each one would
+# burn 30 searches a day to find nothing. Re-run the probe to refresh this.
 ALL_INDONESIA_DESTINATIONS: Dict[str, str] = {
+    # --- Direct from KUL ---------------------------------------------- #
     "CGK": "Jakarta",
     "DPS": "Denpasar (Bali)",
     "SUB": "Surabaya",
     "KNO": "Medan",
-    # Yogyakarta's international traffic moved to YIA (Kulon Progo); JOG
-    # (Adisutjipto) is domestic-only now, so KUL->JOG returns no flights at all.
-    "YIA": "Yogyakarta",
-    "BDO": "Bandung",
-    "UPG": "Makassar",
-    "LOP": "Lombok",
-    "SRG": "Semarang",
     "PDG": "Padang",
     "PKU": "Pekanbaru",
-    "BPN": "Balikpapan",
-    "BTH": "Batam",
-    "PLM": "Palembang",
     "PNK": "Pontianak",
+    "LOP": "Lombok",
+    # --- Reachable with a connection (international + domestic) -------- #
+    # Yogyakarta's international traffic moved to YIA (Kulon Progo); JOG
+    # (Adisutjipto) is domestic-only, so KUL->JOG returns nothing at all.
+    "YIA": "Yogyakarta",
+    "SOC": "Solo",
+    "SRG": "Semarang",
+    "MLG": "Malang",
+    "BDO": "Bandung",
+    "BTJ": "Banda Aceh",
+    "PLM": "Palembang",
+    "DJB": "Jambi",
+    "TKG": "Bandar Lampung",
+    "BTH": "Batam",
+    "UPG": "Makassar",
+    "MDC": "Manado",
+    "KDI": "Kendari",
+    "BPN": "Balikpapan",
+    "BDJ": "Banjarmasin",
+    "LBJ": "Labuan Bajo (Komodo)",
+    "AMQ": "Ambon",
+    "SOQ": "Sorong (Raja Ampat)",
 }
 
-# A conservative default that keeps the daily request count modest (Google
-# Flights has no quota, but heavy scraping risks rate-limiting). Widen ROUTES
-# once you've confirmed runs stay reliable.
-DEFAULT_ROUTES: List[str] = [
-    "CGK", "DPS", "SUB", "KNO", "YIA",
-    "BDO", "UPG", "LOP", "BTH", "PDG",
-]
+# Scan everything reachable. Work is split across parallel CI shards, so the
+# cost of breadth is more shards rather than a longer run.
+DEFAULT_ROUTES: List[str] = list(ALL_INDONESIA_DESTINATIONS)
+
+
+def shard_routes(routes: List["Route"], shard: int, shards: int) -> List["Route"]:
+    """Deal routes round-robin across CI shards.
+
+    Round-robin rather than contiguous blocks so each shard gets a mix of
+    fast and slow routes instead of one shard drawing all the heavy ones.
+    """
+    if shards <= 1:
+        return list(routes)
+    if not 0 <= shard < shards:
+        raise ValueError(f"shard {shard} out of range for {shards} shards")
+    return [r for i, r in enumerate(routes) if i % shards == shard]
 
 
 @dataclass
@@ -124,11 +150,11 @@ class Config:
         default_factory=lambda: list(range(1, 31))
     )
 
-    # Round trips still sample: pairing every departure with every stay length
-    # is quadratic, and one-way coverage is what finds underpriced fares.
-    # Returns are allowed to land past the departure window, capped by
-    # max_trip_days (the "30 days from go to from date" rule).
-    round_trip: bool = True
+    # Round trips are off by default: exhaustive one-way coverage is what
+    # surfaces underpriced fares, and a return can be priced as two one-ways.
+    # Enable with ROUND_TRIP=true; returns are then capped by max_trip_days
+    # (the "30 days from go to from date" rule).
+    round_trip: bool = False
     round_trip_offsets: List[int] = field(
         default_factory=lambda: list(range(2, 31, 3))
     )
@@ -197,7 +223,7 @@ class Config:
             # in [start, window] so coverage is exhaustive rather than sampled.
             departure_offsets=_get_int_list(
                 "DEPARTURE_OFFSETS", list(range(start, window + 1))),
-            round_trip=_get_bool("ROUND_TRIP", True),
+            round_trip=_get_bool("ROUND_TRIP", False),
             round_trip_offsets=_get_int_list(
                 "ROUND_TRIP_OFFSETS", list(range(start + 1, window + 1, 3))),
             stay_lengths=_get_int_list("STAY_LENGTHS", [7, 14]),
