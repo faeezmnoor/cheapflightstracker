@@ -65,7 +65,9 @@ ALL_INDONESIA_DESTINATIONS: Dict[str, str] = {
     "DPS": "Denpasar (Bali)",
     "SUB": "Surabaya",
     "KNO": "Medan",
-    "JOG": "Yogyakarta",
+    # Yogyakarta's international traffic moved to YIA (Kulon Progo); JOG
+    # (Adisutjipto) is domestic-only now, so KUL->JOG returns no flights at all.
+    "YIA": "Yogyakarta",
     "BDO": "Bandung",
     "UPG": "Makassar",
     "LOP": "Lombok",
@@ -82,7 +84,7 @@ ALL_INDONESIA_DESTINATIONS: Dict[str, str] = {
 # Flights has no quota, but heavy scraping risks rate-limiting). Widen ROUTES
 # once you've confirmed runs stay reliable.
 DEFAULT_ROUTES: List[str] = [
-    "CGK", "DPS", "SUB", "KNO", "JOG",
+    "CGK", "DPS", "SUB", "KNO", "YIA",
     "BDO", "UPG", "LOP", "BTH", "PDG",
 ]
 
