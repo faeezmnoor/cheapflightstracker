@@ -100,12 +100,14 @@ class ShardRoundTripTest(unittest.TestCase):
             self.assertEqual(payload["run_date"], "2026-08-07")
             self.assertEqual(len(payload["offers"]), 2)   # reduced to cheapest
 
-            merged, errors, scanned, run_date = read_shards([p])
+            merged, errors, scanned, run_date, scanned_count = read_shards([p])
             self.assertEqual(run_date, "2026-08-07")
             self.assertEqual(errors, ["boom"])
             self.assertEqual(scanned, ["2026-08-08", "2026-08-09"])
             self.assertEqual(merged["KUL-CGK"][0].price, 300)
             self.assertEqual(merged["KUL-DPS"][0].price, 500)
+            # raw count survives compaction so the digest can report it
+            self.assertEqual(scanned_count, 3)
 
     def test_merges_multiple_shards(self):
         cfg = Config(routes=_routes(2), round_trip=False, departure_offsets=[1])
@@ -117,7 +119,7 @@ class ShardRoundTripTest(unittest.TestCase):
             write_shard(os.path.join(d, "b.json"), today,
                         {"KUL-DPS": [Offer("KUL", "DPS", "2026-08-08", 500,
                                            "MYR", "one_way")]}, ["err"], cfg)
-            merged, errors, _, _ = read_shards([os.path.join(d, "*.json")])
+            merged, errors, _, _, _ = read_shards([os.path.join(d, "*.json")])
             self.assertEqual(sorted(merged), ["KUL-CGK", "KUL-DPS"])
             self.assertEqual(errors, ["err"])
 

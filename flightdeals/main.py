@@ -60,6 +60,9 @@ def write_shard(path: str, today: date, offers_by_route: Dict[str, List[Offer]],
         "run_date": today.isoformat(),
         "errors": errors,
         "scanned_departures": sorted({d for d, _ in plan_date_pairs(config, today)}),
+        # How many fares were actually examined, before compaction — the
+        # digest reports this, not the handful of survivors.
+        "offers_scanned": sum(len(v) for v in offers_by_route.values()),
         # Only the cheapest per route/trip-type survives — that is all the
         # baseline uses, and it keeps the artifacts (and history) small.
         "offers": [o.to_record() for o in
@@ -74,7 +77,7 @@ def write_shard(path: str, today: date, offers_by_route: Dict[str, List[Offer]],
 
 
 def read_shards(patterns: List[str]) -> tuple[Dict[str, List[Offer]], List[str],
-                                              List[str], str | None]:
+                                              List[str], str | None, int]:
     """Merge shard files back into offers/errors/scanned dates."""
     paths: List[str] = []
     for pattern in patterns:
@@ -86,18 +89,20 @@ def read_shards(patterns: List[str]) -> tuple[Dict[str, List[Offer]], List[str],
     errors: List[str] = []
     scanned: set[str] = set()
     run_date = None
+    scanned_count = 0
     for path in paths:
         with open(path, "r", encoding="utf-8") as fh:
             payload = json.load(fh)
         run_date = run_date or payload.get("run_date")
         errors.extend(payload.get("errors") or [])
         scanned.update(payload.get("scanned_departures") or [])
+        scanned_count += int(payload.get("offers_scanned") or 0)
         for record in payload.get("offers") or []:
             offer = Offer.from_record(record)
             offers_by_route.setdefault(offer.route_key, []).append(offer)
         print(f"[report] loaded {len(payload.get('offers') or [])} fares "
               f"from {path}")
-    return offers_by_route, errors, sorted(scanned), run_date
+    return offers_by_route, errors, sorted(scanned), run_date, scanned_count
 
 
 # --------------------------------------------------------------------------- #
@@ -171,11 +176,11 @@ def main(argv: List[str] | None = None) -> int:
 
     try:
         if args.report:
-            offers, errors, scanned, run_date = read_shards(args.report)
+            offers, errors, scanned, run_date, checked = read_shards(args.report)
             if run_date and not args.date:
                 today = datetime.strptime(run_date, "%Y-%m-%d").date()
-            checked = sum(len(v) for v in offers.values())
-            report(config, today, offers, errors, scanned, checked)
+            report(config, today, offers, errors, scanned,
+                   checked or sum(len(v) for v in offers.values()))
         elif args.output:
             if args.shard is not None:
                 config.routes = shard_routes(config.routes, args.shard, args.shards)
