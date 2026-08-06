@@ -85,6 +85,17 @@ def build_subject(result: RunResult) -> str:
 # --------------------------------------------------------------------------- #
 # Bodies
 # --------------------------------------------------------------------------- #
+def _scanned_window(result: RunResult) -> str:
+    """e.g. '10 dates, 13 Aug - 5 Oct' — what 'cheapest' is cheapest *of*."""
+    dates = result.scanned_departures
+    if not dates:
+        return ""
+    if len(dates) == 1:
+        return f"1 departure date ({_short_date(dates[0])})"
+    return (f"{len(dates)} departure dates "
+            f"({_short_date(dates[0])} – {_short_date(dates[-1])})")
+
+
 def build_text(result: RunResult) -> str:
     lines: List[str] = []
     lines.append(f"Daily flight-deal scan  —  {result.run_date}")
@@ -132,6 +143,11 @@ def build_text(result: RunResult) -> str:
     if result.errors:
         lines.append("")
         lines.append(f"Notes: {len(result.errors)} search error(s) this run.")
+    lines.append("")
+    window = _scanned_window(result)
+    if window:
+        lines.append("")
+        lines.append(f"Cheapest = cheapest across the {window} scanned.")
     lines.append("")
     lines.append("Baselines strengthen as history accumulates. "
                  "Fares via Google Flights. Automated daily scan.")
@@ -217,6 +233,10 @@ def build_html(result: RunResult) -> str:
             'like.</td></tr>'
         )
     summary_html = "".join(_summary_row(s, result.currency) for s in result.summaries)
+    window = _scanned_window(result)
+    scanned_note = (f"&#9432; <strong>Cheapest</strong> means cheapest across "
+                    f"the {escape(window)} scanned — not every possible date."
+                    if window else "")
 
     return f"""\
 <!DOCTYPE html>
@@ -262,7 +282,10 @@ def build_html(result: RunResult) -> str:
       </table>
     </td></tr>
 
-    <tr><td style="padding:22px 0 8px;font-size:12px;color:#aaa;line-height:1.6;">
+    <tr><td style="padding:10px 0 0;font-size:12px;color:#888;">
+      {scanned_note}
+    </td></tr>
+    <tr><td style="padding:14px 0 8px;font-size:12px;color:#aaa;line-height:1.6;">
       A fare is flagged when it drops well below the usual <em>cheapest</em>
       fare for that route and trip type (one-way and return are compared
       separately). Baselines strengthen as history accumulates. Fares via

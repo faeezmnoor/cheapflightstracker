@@ -49,7 +49,8 @@ def find_deals(
                     and baseline.samples >= config.min_samples)
 
     for route in routes:
-        offers = sorted(offers_by_route.get(route.key, []), key=lambda o: o.price)
+        offers = sorted(offers_by_route.get(route.key, []),
+                        key=lambda o: (o.price, o.departure_date))
 
         cheapest = offers[0] if offers else None
         # Compare the headline fare against its own trip type's baseline.

@@ -132,18 +132,24 @@ Everything is an env var (see [`.env.example`](.env.example)). The most useful:
 
 - **Which cities** — `ROUTES=CGK,DPS,SUB,...` (default is the 10 busiest; the
   full list of 15 is in `config.py`).
-- **Which dates** — `DEPARTURE_OFFSETS=14,35` (days from today; default). Add
-  more like `14,30,45,60` to probe further out.
+- **Which dates** — `DEPARTURE_OFFSETS` (one-way probes, days from today;
+  default `7,11,15,19,23,27,31,38,45,60`) and `ROUND_TRIP_OFFSETS` (default
+  `14,21,35,50`). **Google prices every date separately, so a date you don't
+  probe is a price you can't see** — "cheapest" always means cheapest among the
+  dates scanned, and the email says so. Denser sampling finds more, at the cost
+  of one request per date.
+- **Point of sale** — `REGION=my`, `LANGUAGE=en`. Google prices by market, so
+  these make the runner see the fares a Malaysian shopper sees.
 - **One-way vs round-trip** — `ROUND_TRIP=true`, `STAY_LENGTHS=14`,
   `MAX_TRIP_DAYS=30`.
 - **Sensitivity** — `DEAL_THRESHOLD=0.20`, `SEVERE_THRESHOLD=0.35`.
 
 ### Request volume
 Google Flights has **no quota**, but it's an unofficial data source, so hammering
-it risks being rate-limited/blocked. The defaults make ~**40 requests/day**
-(10 routes × 2 departure dates × [one-way + round-trip]), spaced out by a short
-pause. Widen gradually and watch the run logs (they print how many offers came
-back) before scaling up.
+it risks being rate-limited/blocked. The defaults make ~**140 requests/day**
+(10 routes × [10 one-way dates + 4 round-trip dates]) — roughly a 15-minute run,
+paced ~3s apart with jitter. Widen gradually and watch the run logs: they print
+the offer count, a sample of any errors, and which routes came back empty.
 
 ---
 

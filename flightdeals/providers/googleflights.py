@@ -29,6 +29,41 @@ from .base import FlightProvider, ProviderError
 from .util import google_flights_link
 
 
+GOOGLE_FLIGHTS_URL = "https://www.google.com/travel/flights"
+
+
+class LocalizedFetcher:
+    """Fetches the results page pinned to a point-of-sale.
+
+    fast-flights' default fetcher sends only ``tfs``/``hl``/``curr`` and leaves
+    ``gl`` unset, so a request from a US datacenter can be priced in a
+    different market than the one you actually buy in. Sending gl/hl
+    explicitly makes the fares match what a shopper in that country sees.
+    """
+
+    def __init__(self, config: Config):
+        self.config = config
+
+    def _params(self, query) -> dict:
+        params = dict(query.params()) if hasattr(query, "params") else {"q": query}
+        params["hl"] = self.config.language
+        params["gl"] = self.config.region
+        params["curr"] = self.config.currency
+        return params
+
+    def fetch_html(self, q, /) -> str:
+        from primp import Client
+        client = Client(
+            impersonate="chrome_145",
+            impersonate_os="macos",
+            referer=True,
+            proxy=self.config.fetch_proxy,
+            cookie_store=True,
+            timeout=45,
+        )
+        return client.get(GOOGLE_FLIGHTS_URL, params=self._params(q)).text
+
+
 @dataclass
 class _Itinerary:
     """Minimal stand-in for fast_flights' ``Flights`` result object.
@@ -106,6 +141,7 @@ class GoogleFlightsProvider(FlightProvider):
         self._FlightQuery = FlightQuery
         self._Passengers = Passengers
         self._FlightsNotFound = FlightsNotFound
+        self._fetcher = LocalizedFetcher(config)
 
     def search(
         self,
@@ -163,7 +199,9 @@ class GoogleFlightsProvider(FlightProvider):
                 stops=stops,
                 deep_link=link,
             ))
-        offers.sort(key=lambda o: o.price)
+        # Ties go to the sooner flight, then fewer stops.
+        offers.sort(key=lambda o: (o.price, o.departure_date,
+                                   o.stops if o.stops is not None else 9))
         return offers
 
     def _fetch(self, query):
@@ -171,7 +209,7 @@ class GoogleFlightsProvider(FlightProvider):
         last_exc = None
         for attempt in range(self.config.fetch_retries):
             try:
-                return self._get_flights(query, proxy=self.config.fetch_proxy)
+                return self._get_flights(query, integration=self._fetcher)
             except self._FlightsNotFound:
                 return []
             except Exception as exc:  # noqa: BLE001 - network / parse hiccups
@@ -197,8 +235,7 @@ class GoogleFlightsProvider(FlightProvider):
         its normal retry/backoff path).
         """
         try:
-            html = self._fetch_html(query, proxy=self.config.fetch_proxy)
-            return _parse_itineraries(html)
+            return _parse_itineraries(self._fetcher.fetch_html(query))
         except Exception:  # noqa: BLE001 - salvage is strictly best-effort
             return None
 

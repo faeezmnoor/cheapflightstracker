@@ -22,24 +22,26 @@ def plan_date_pairs(config: Config, today: date) -> List[Tuple[str, Optional[str
     pairs: List[Tuple[str, Optional[str]]] = []
     seen = set()
 
-    for offset in config.departure_offsets:
-        dep = today + timedelta(days=offset)
-        dep_str = dep.isoformat()
-
-        key = (dep_str, None)
+    def _add(key: Tuple[str, Optional[str]]) -> None:
         if key not in seen:
             seen.add(key)
             pairs.append(key)
 
-        if config.round_trip:
+    for offset in config.departure_offsets:
+        _add(((today + timedelta(days=offset)).isoformat(), None))
+
+    if config.round_trip:
+        for offset in config.round_trip_offsets:
+            dep = today + timedelta(days=offset)
             for stay in config.stay_lengths:
                 if stay <= 0 or stay > config.max_trip_days:
                     continue
-                ret_str = (dep + timedelta(days=stay)).isoformat()
-                key = (dep_str, ret_str)
-                if key not in seen:
-                    seen.add(key)
-                    pairs.append(key)
+                _add((dep.isoformat(),
+                      (dep + timedelta(days=stay)).isoformat()))
+
+    # Earliest departures first: ties on price are broken in favour of the
+    # sooner flight, which is what "the closer to today the better" means.
+    pairs.sort(key=lambda p: (p[0], p[1] or ""))
     return pairs
 
 

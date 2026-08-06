@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass, field
 from typing import List, Optional
 
 
@@ -92,3 +92,7 @@ class RunResult:
     summaries: List[RouteSummary]
     offers_checked: int
     errors: List[str]
+    # Departure dates probed this run. "Cheapest" always means cheapest among
+    # these — Google prices each date separately, so stating the window keeps
+    # the digest from reading as "the cheapest date that exists".
+    scanned_departures: List[str] = field(default_factory=list)

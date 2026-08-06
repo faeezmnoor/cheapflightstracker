@@ -112,14 +112,21 @@ class Config:
     nonstop_only: bool = False          # direct flights are fine but not required
     max_offers_per_search: int = 3
 
-    # Departure dates to probe, expressed as "days from today". Kept small by
-    # default to keep total Google requests modest — widen via
-    # DEPARTURE_OFFSETS once you've confirmed runs stay reliable.
-    departure_offsets: List[int] = field(default_factory=lambda: [14, 35])
+    # One-way departure dates to probe, as "days from today". Google prices
+    # each date separately, so a date we don't probe is a price we can't see —
+    # sampling only a couple of dates means "cheapest" really means "cheapest
+    # of the two days we looked at". Sampled densely near-term (cheap fares
+    # soon are the point) and thinning out further ahead.
+    departure_offsets: List[int] = field(
+        default_factory=lambda: [7, 11, 15, 19, 23, 27, 31, 38, 45, 60]
+    )
 
-    # Round-trip: for each departure date, try these stay-lengths (days).
-    # Capped so the return is always within max_trip_days of departure.
+    # Round trips are probed on their own (smaller) set of departure dates,
+    # since each one costs another request. Returns stay within max_trip_days.
     round_trip: bool = True
+    round_trip_offsets: List[int] = field(
+        default_factory=lambda: [14, 21, 35, 50]
+    )
     stay_lengths: List[int] = field(default_factory=lambda: [14])
     max_trip_days: int = 30
 
@@ -131,6 +138,10 @@ class Config:
 
     # --- Provider / infra -------------------------------------------------- #
     provider: str = "googleflights"     # "googleflights" | "mock"
+    # Point-of-sale. Google prices by market, so querying without these from a
+    # US datacenter can return different fares than a shopper in Malaysia sees.
+    region: str = "my"                  # gl= (country)
+    language: str = "en"                # hl= (language)
     fetch_retries: int = 4              # retries on a failed Google fetch
     fetch_proxy: str | None = None      # optional proxy URL for the fetcher
     # Google throttles bursts hard: at ~1s spacing roughly a third of searches
@@ -173,8 +184,10 @@ class Config:
             adults=_get_int("ADULTS", 1),
             nonstop_only=_get_bool("NONSTOP_ONLY", False),
             max_offers_per_search=_get_int("MAX_OFFERS_PER_SEARCH", 3),
-            departure_offsets=_get_int_list("DEPARTURE_OFFSETS", [14, 35]),
+            departure_offsets=_get_int_list(
+                "DEPARTURE_OFFSETS", [7, 11, 15, 19, 23, 27, 31, 38, 45, 60]),
             round_trip=_get_bool("ROUND_TRIP", True),
+            round_trip_offsets=_get_int_list("ROUND_TRIP_OFFSETS", [14, 21, 35, 50]),
             stay_lengths=_get_int_list("STAY_LENGTHS", [14]),
             max_trip_days=_get_int("MAX_TRIP_DAYS", 30),
             deal_threshold=_get_float("DEAL_THRESHOLD", 0.20),
@@ -182,6 +195,8 @@ class Config:
             min_samples=_get_int("MIN_SAMPLES", 5),
             history_window_days=_get_int("HISTORY_WINDOW_DAYS", 90),
             provider=_get("PROVIDER", "googleflights"),
+            region=_get("REGION", "my"),
+            language=_get("LANGUAGE", "en"),
             fetch_retries=_get_int("FETCH_RETRIES", 4),
             fetch_proxy=_get("FF_PROXY"),
             request_pause_seconds=_get_float("REQUEST_PAUSE_SECONDS", 3.0),

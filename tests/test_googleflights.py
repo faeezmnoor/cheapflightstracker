@@ -37,9 +37,13 @@ class GoogleFlightsMappingTest(unittest.TestCase):
     def _provider(self, itineraries):
         c = Config(provider="googleflights", currency="MYR", adults=1)
         p = GoogleFlightsProvider(c)
-        # Replace the network calls with deterministic fakes.
+        # Replace the network calls with deterministic fakes. **kw so a change
+        # to how _fetch invokes get_flights can't silently turn into a
+        # TypeError -> salvage path -> real HTTP request from a unit test.
         p._create_query = lambda **kw: _FakeQuery()
-        p._get_flights = lambda q, proxy=None: itineraries
+        p._get_flights = lambda q, **kw: itineraries
+        # Belt and braces: the salvage path must never touch the network here.
+        p._retry_parse_leniently = lambda q: None
         return p
 
     def test_oneway_mapping(self):
@@ -85,6 +89,27 @@ class GoogleFlightsMappingTest(unittest.TestCase):
     def test_empty_result(self):
         p = self._provider([])
         self.assertEqual(p.search("KUL", "SUB", "2026-09-05"), [])
+
+
+@unittest.skipUnless(HAS_FF, "fast-flights not installed")
+class LocalizedFetcherTest(unittest.TestCase):
+    """Google prices by market. Without gl/hl the request is priced from
+    wherever the runner sits, not from the market the user buys in."""
+
+    def test_sets_point_of_sale_params(self):
+        from flightdeals.providers.googleflights import LocalizedFetcher
+        f = LocalizedFetcher(Config(region="my", language="en", currency="MYR"))
+        params = f._params(_FakeQuery())
+        self.assertEqual(params["gl"], "my")
+        self.assertEqual(params["hl"], "en")
+        self.assertEqual(params["curr"], "MYR")
+        self.assertEqual(params["tfs"], "ABC123")   # query token preserved
+
+    def test_region_is_configurable(self):
+        from flightdeals.providers.googleflights import LocalizedFetcher
+        f = LocalizedFetcher(Config(region="sg", language="en", currency="SGD"))
+        params = f._params(_FakeQuery())
+        self.assertEqual((params["gl"], params["curr"]), ("sg", "SGD"))
 
 
 @unittest.skipUnless(HAS_FF, "fast-flights not installed")

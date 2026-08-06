@@ -18,7 +18,7 @@ from .detector import find_deals
 from .emailer import send_email
 from .models import RunResult
 from .providers import get_provider
-from .search import run_searches
+from .search import plan_date_pairs, run_searches
 
 
 def run(config: Config, today: date | None = None) -> RunResult:
@@ -54,6 +54,7 @@ def run(config: Config, today: date | None = None) -> RunResult:
         summaries=summaries,
         offers_checked=offers_checked,
         errors=errors,
+        scanned_departures=sorted({dep for dep, _ in plan_date_pairs(config, today)}),
     )
 
     send_email(result, config)

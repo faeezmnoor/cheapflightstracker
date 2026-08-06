@@ -20,13 +20,32 @@ class SearchPlanTest(unittest.TestCase):
         self.assertEqual(pairs, [("2026-08-11", None), ("2026-08-21", None)])
 
     def test_round_trip_within_window(self):
+        # One-ways come from departure_offsets; round trips from their own
+        # (smaller) round_trip_offsets, so each extra return date is a
+        # deliberate request rather than a multiplier on every date.
         c = Config(departure_offsets=[10], round_trip=True,
-                   stay_lengths=[7, 40], max_trip_days=30)
+                   round_trip_offsets=[10], stay_lengths=[7, 40],
+                   max_trip_days=30)
         pairs = plan_date_pairs(c, date(2026, 8, 1))
-        # stay of 40 is dropped (> max_trip_days); 7 kept
         self.assertIn(("2026-08-11", None), pairs)
         self.assertIn(("2026-08-11", "2026-08-18"), pairs)
+        # a 40-day stay exceeds max_trip_days and is dropped
         self.assertNotIn(("2026-08-11", "2026-09-20"), pairs)
+
+    def test_round_trip_offsets_are_independent_of_one_way_dates(self):
+        c = Config(departure_offsets=[10, 20], round_trip=True,
+                   round_trip_offsets=[30], stay_lengths=[7], max_trip_days=30)
+        pairs = plan_date_pairs(c, date(2026, 8, 1))
+        self.assertEqual([p for p in pairs if p[1] is None],
+                         [("2026-08-11", None), ("2026-08-21", None)])
+        self.assertEqual([p for p in pairs if p[1]],
+                         [("2026-08-31", "2026-09-07")])
+
+    def test_pairs_are_ordered_earliest_first(self):
+        c = Config(departure_offsets=[30, 10, 20], round_trip=False)
+        pairs = plan_date_pairs(c, date(2026, 8, 1))
+        self.assertEqual([p[0] for p in pairs],
+                         sorted(p[0] for p in pairs))
 
     def test_run_searches_with_mock(self):
         routes = [Route("KUL", "CGK", "Jakarta")]
