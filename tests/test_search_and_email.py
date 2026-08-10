@@ -114,6 +114,32 @@ class EmailTest(unittest.TestCase):
         self.assertIn("9 Sep → 23 Sep · return", html)
         self.assertIn(">When<", html)
 
+    def test_untrusted_baseline_shows_building_not_a_price(self):
+        offer = Offer("KUL", "PNK", "2026-08-20", 302.0, "MYR", "one_way")
+        b = Baseline("KUL-PNK", 3, median=309.0)      # only 3 days
+        result = RunResult("2026-08-10", "MYR", [], [
+            RouteSummary("KUL-PNK", "Pontianak", offer, b, None,
+                         baseline_trusted=False)], 100, [])
+        html = build_html(result)
+        self.assertIn("building", html)
+        self.assertNotIn("MYR 309", html)
+
+        result.summaries[0].baseline_trusted = True
+        html = build_html(result)
+        self.assertIn("MYR 309", html)
+
+    def test_deal_card_uses_city_name(self):
+        offer = Offer("KUL", "UPG", "2026-09-08", 469.0, "MYR", "one_way",
+                      airline="AirAsia", stops=0)
+        b = Baseline("KUL-UPG", 5, median=608.0)
+        deal = Deal(offer=offer, baseline=b, discount_pct=0.229,
+                    saving=139.0, severity="deal", city="Makassar")
+        result = RunResult("2026-08-10", "MYR", [deal], [], 3416, [])
+        html = build_html(result)
+        self.assertIn("KL &rarr; Makassar", html)
+        self.assertIn("Makassar", build_subject(result))
+        self.assertIn("Makassar", build_text(result))
+
     def test_no_offers_row_spans_all_columns(self):
         b = Baseline("KUL-JOG", 0)
         result = RunResult("2026-08-05", "MYR", [], [

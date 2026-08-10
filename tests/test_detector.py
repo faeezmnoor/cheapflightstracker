@@ -125,6 +125,29 @@ class DetectorTest(unittest.TestCase):
         self.assertEqual(deals[0].baseline.median, 905)
         self.assertEqual(deals[0].severity, "severe")   # 500 vs 905 usual
 
+    def test_deal_carries_city_name(self):
+        """The digest headlines the city, not the IATA code: an alert reading
+        'KL -> UPG' next to a table row saying 'KL -> Makassar' is the same
+        route twice in two languages."""
+        hist = _history("CGK", [300, 300, 300, 300, 300])
+        deals, _ = find_deals({"KUL-CGK": [_offer("CGK", 200)]}, hist,
+                              [self.route], _cfg(), self.today)
+        self.assertEqual(deals[0].city, "Jakarta")
+
+    def test_summary_marks_untrusted_baselines(self):
+        """A 'usual' price must not be shown for a baseline too thin to derive
+        a discount from — that reads as 'we know the usual but won't say the
+        saving'."""
+        thin = _history("CGK", [300, 300])          # 2 days < min_samples 5
+        _, summaries = find_deals({"KUL-CGK": [_offer("CGK", 290)]}, thin,
+                                  [self.route], _cfg(), self.today)
+        self.assertFalse(summaries[0].baseline_trusted)
+
+        mature = _history("CGK", [300] * 5)
+        _, summaries = find_deals({"KUL-CGK": [_offer("CGK", 290)]}, mature,
+                                  [self.route], _cfg(), self.today)
+        self.assertTrue(summaries[0].baseline_trusted)
+
     def test_deals_sorted_by_discount(self):
         routes = [Route("KUL", "CGK", "Jakarta"), Route("KUL", "DPS", "Bali")]
         hist = _history("CGK", [300] * 5) + _history("DPS", [400] * 5)

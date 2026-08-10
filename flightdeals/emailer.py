@@ -74,7 +74,7 @@ def build_subject(result: RunResult) -> str:
         return f"✈️ No KL→Indonesia deals today ({result.run_date})"
     severe = [d for d in deals if d.is_severe]
     best = deals[0]
-    city = best.offer.destination
+    city = best.city or best.offer.destination
     lead = f"{len(deals)} underpriced KL→Indonesia flight(s)"
     if severe:
         lead = f"\U0001f525 {len(severe)} severely underpriced + {lead}"
@@ -111,7 +111,8 @@ def build_text(result: RunResult) -> str:
             o = d.offer
             tag = "*** SEVERE *** " if d.is_severe else ""
             lines.append(
-                f"{tag}KL -> {o.destination}  {_money(o.price, o.currency)}  "
+                f"{tag}KL -> {d.city or o.destination}  "
+                f"{_money(o.price, o.currency)}  "
                 f"({_pct(d.discount_pct)} off usual {_money(d.baseline.median, o.currency)}, "
                 f"save {_money(d.saving, o.currency)})"
             )
@@ -131,7 +132,7 @@ def build_text(result: RunResult) -> str:
             continue
         o = s.cheapest
         usual = (_money(s.baseline.median, result.currency)
-                 if s.baseline.is_reliable else "building baseline")
+                 if s.baseline_trusted else "building baseline")
         # Only advertise a saving when the fare is genuinely below usual.
         disc = (f" ({_pct(s.discount_pct)} off)"
                 if s.discount_pct and s.discount_pct > 0 else "")
@@ -174,7 +175,7 @@ def _deal_card(d: Deal) -> str:
           <span style="font-size:13px;color:#999;float:right;">
                 {escape(_stops_desc(o))} {escape(o.airline or '')}</span>
           <div style="font-size:20px;font-weight:700;color:#1a1a1a;margin:10px 0 2px;">
-                KL &rarr; {escape(o.destination)}</div>
+                KL &rarr; {escape(d.city or o.destination)}</div>
           <div style="font-size:13px;color:#666;">{escape(_trip_desc(o))}</div>
           <div style="margin-top:10px;">
             <span style="font-size:26px;font-weight:800;color:#111;">
@@ -201,7 +202,7 @@ def _summary_row(s: RouteSummary, currency: str) -> str:
                 f'border-bottom:1px solid #f0f0f0;">no offers</td></tr>')
     o = s.cheapest
     usual = (_money(s.baseline.median, currency)
-             if s.baseline.is_reliable else "building…")
+             if s.baseline_trusted else "building…")
     # A negative "discount" means it's pricier than usual — don't call it "off".
     has_saving = bool(s.discount_pct and s.discount_pct > 0)
     disc = _pct(s.discount_pct) if has_saving else ""

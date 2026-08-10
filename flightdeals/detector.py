@@ -68,6 +68,7 @@ def find_deals(
             cheapest=cheapest,
             baseline=summary_baseline,
             discount_pct=summary_discount,
+            baseline_trusted=_trusted(summary_baseline),
         ))
 
         for offer in offers:
@@ -84,6 +85,7 @@ def find_deals(
                 discount_pct=round(discount, 4),
                 saving=round(baseline.median - offer.price, 2),
                 severity=severity,
+                city=route.city,
             ))
             # One deal per route is enough; offers are cheapest-first, so we
             # report the best and don't spam every fare on the route.

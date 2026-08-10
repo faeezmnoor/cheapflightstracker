@@ -67,6 +67,7 @@ class Deal:
     discount_pct: float            # 0.0 - 1.0, vs. the baseline median
     saving: float                  # currency units off the usual price
     severity: str                  # "severe" | "deal"
+    city: str = ""                 # human name; the digest shows this, not IATA
 
     @property
     def is_severe(self) -> bool:
@@ -82,6 +83,9 @@ class RouteSummary:
     cheapest: Optional[Offer]
     baseline: Baseline
     discount_pct: Optional[float]  # None when there's no reliable baseline yet
+    # False until the baseline has MIN_SAMPLES days behind it. The digest must
+    # not print a "usual" price it is not willing to compute a discount from.
+    baseline_trusted: bool = False
 
 
 @dataclass
