@@ -69,9 +69,9 @@ once it has its own history — otherwise it would fire every single day.
         ▼
    run.py ──► flightdeals.main.run()
         │
-        ├─ search.py       plan date combos, query Google Flights per route
-        ├─ baseline.py     load history, compute each route's "usual price"
-        ├─ detector.py     flag fares that beat usual by the threshold
+        ├─ search.py       every route x every date in the window
+        ├─ baseline.py     route "usual price" + per-departure-date series
+        ├─ detector.py     confirmed price drops, then merely cheap dates
         ├─ emailer.py      build + send the HTML/text digest via Gmail SMTP
         └─ baseline.py     append today's fares, commit history back to the repo
 ```
@@ -148,26 +148,28 @@ python -m unittest discover -s tests -v
 
 Everything is an env var (see [`.env.example`](.env.example)). The most useful:
 
-- **Which cities** — `ROUTES=CGK,DPS,SUB,...` (default is the 10 busiest; the
-  full list of 15 is in `config.py`).
-- **Which dates** — `DEPARTURE_OFFSETS` (one-way probes, days from today;
-  default `7,11,15,19,23,27,31,38,45,60`) and `ROUND_TRIP_OFFSETS` (default
-  `14,21,35,50`). **Google prices every date separately, so a date you don't
-  probe is a price you can't see** — "cheapest" always means cheapest among the
-  dates scanned, and the email says so. Denser sampling finds more, at the cost
-  of one request per date.
+- **Which cities** — `ROUTES=CGK,DPS,SUB,...`. The default is all **26 airports
+  confirmed reachable from KL** by `scripts/probe_destinations.py` (8 direct,
+  18 via a connection); airports with no KL service are deliberately excluded.
+- **Which dates** — every date in the next `DEPARTURE_WINDOW_DAYS` (default 30)
+  is scanned, **exhaustively, not sampled**: Google prices each date
+  separately, so a date you don't probe is a price you can't see. Set
+  `DEPARTURE_OFFSETS` to override with an explicit list.
 - **Point of sale** — `REGION=my`, `LANGUAGE=en`. Google prices by market, so
   these make the runner see the fares a Malaysian shopper sees.
-- **One-way vs round-trip** — `ROUND_TRIP=true`, `STAY_LENGTHS=14`,
-  `MAX_TRIP_DAYS=30`.
+- **One-way vs round-trip** — round trips are **off** by default (a return
+  prices as two one-ways). `ROUND_TRIP=true` adds them, on their own
+  `ROUND_TRIP_OFFSETS` grid, capped by `MAX_TRIP_DAYS=30`.
 - **Sensitivity** — `DEAL_THRESHOLD=0.20`, `SEVERE_THRESHOLD=0.35`.
 
 ### Request volume
 Google Flights has **no quota**, but it's an unofficial data source, so hammering
-it risks being rate-limited/blocked. The defaults make ~**140 requests/day**
-(10 routes × [10 one-way dates + 4 round-trip dates]) — roughly a 15-minute run,
-paced ~3s apart with jitter. Widen gradually and watch the run logs: they print
-the offer count, a sample of any errors, and which routes came back empty.
+it risks being rate-limited/blocked. The defaults make ~**780 requests/day**
+(26 routes × 30 dates), paced ~3s apart with jitter. That is hours in one
+process, so scanning is split across **4 parallel CI shards** (~15 min wall
+clock, and each shard gets its own runner IP, keeping the per-IP rate low).
+Watch the run logs: they print the offer count, a sample of any errors, and
+which routes came back empty.
 
 ---
 
