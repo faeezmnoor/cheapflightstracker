@@ -164,7 +164,10 @@ class Config:
     # --- What counts as a "deal" ------------------------------------------ #
     deal_threshold: float = 0.20        # >=20% under the usual price
     severe_threshold: float = 0.35      # >=35% under the usual price = "severe"
-    min_samples: int = 5                # need this much history before flagging
+    min_samples: int = 5                # days of route history before flagging
+    # Prior observations of the *same departure date* before a fare can be
+    # called a price drop rather than just a cheap date.
+    min_date_samples: int = 2
     history_window_days: int = 90       # how far back "usual price" looks
 
     # --- Provider / infra -------------------------------------------------- #
@@ -192,6 +195,7 @@ class Config:
 
     # --- Storage ----------------------------------------------------------- #
     history_path: str = "data/price_history.json"
+    date_history_path: str = "data/date_prices.json"
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -231,6 +235,7 @@ class Config:
             deal_threshold=_get_float("DEAL_THRESHOLD", 0.20),
             severe_threshold=_get_float("SEVERE_THRESHOLD", 0.35),
             min_samples=_get_int("MIN_SAMPLES", 5),
+            min_date_samples=_get_int("MIN_DATE_SAMPLES", 2),
             history_window_days=_get_int("HISTORY_WINDOW_DAYS", 90),
             provider=_get("PROVIDER", "googleflights"),
             region=_get("REGION", "my"),
@@ -247,4 +252,5 @@ class Config:
             always_email=_get_bool("ALWAYS_EMAIL", True),
             dry_run=_get_bool("DRY_RUN", False),
             history_path=_get("HISTORY_PATH", "data/price_history.json"),
+            date_history_path=_get("DATE_HISTORY_PATH", "data/date_prices.json"),
         )

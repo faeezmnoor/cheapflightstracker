@@ -96,6 +96,7 @@ jobs:
           DEAL_THRESHOLD: ${{ vars.DEAL_THRESHOLD }}
           SEVERE_THRESHOLD: ${{ vars.SEVERE_THRESHOLD }}
           MIN_SAMPLES: ${{ vars.MIN_SAMPLES }}
+          MIN_DATE_SAMPLES: ${{ vars.MIN_DATE_SAMPLES }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: python run.py --report "observations/*.json"
 
@@ -104,7 +105,7 @@ jobs:
         run: |
           git config user.name "flight-deals-bot"
           git config user.email "actions@github.com"
-          git add data/price_history.json
+          git add data/price_history.json data/date_prices.json
           if git diff --staged --quiet; then
             echo "No history changes to commit."
           else

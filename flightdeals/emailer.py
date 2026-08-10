@@ -117,6 +117,7 @@ def build_text(result: RunResult) -> str:
                 f"save {_money(d.saving, o.currency)})"
             )
             lines.append(f"    {_trip_desc(o)}  {_stops_desc(o)}  {o.airline or ''}")
+            lines.append(f"    {_basis_text(d, o.currency)}")
             if o.deep_link:
                 lines.append(f"    {o.deep_link}")
     else:
@@ -155,11 +156,34 @@ def build_text(result: RunResult) -> str:
     return "\n".join(lines)
 
 
+def _basis_text(d: Deal, currency: str) -> str:
+    """Say which comparison produced the alert.
+
+    A confirmed drop and a cheap date look identical in the numbers but mean
+    different things: one says this fare fell, the other says we can now see a
+    date we could not see before.
+    """
+    if d.is_price_drop:
+        was = _money(d.previous_price, currency)
+        when = _short_date(d.previous_date)
+        return (f"PRICE DROP for this date: was {was} on {when} "
+                f"({d.basis_samples} prior check(s) of this same date)")
+    return ("CHEAP DATE: no prior history for this departure date, so this is "
+            "measured against the route's usual cheapest, not a price fall")
+
+
+def _basis_badge(d: Deal) -> tuple[str, str]:
+    if d.is_price_drop:
+        return "PRICE DROP", "#c0392b" if d.is_severe else "#e67e22"
+    return "CHEAP DATE", "#2c7be5"
+
+
 def _deal_card(d: Deal) -> str:
     o = d.offer
-    border = "#c0392b" if d.is_severe else "#e67e22"
-    badge = ("SEVERELY UNDERPRICED" if d.is_severe else "UNDERPRICED")
-    badge_bg = "#c0392b" if d.is_severe else "#e67e22"
+    kind, badge_bg = _basis_badge(d)
+    border = badge_bg
+    badge = (f"SEVERELY UNDERPRICED · {kind}" if d.is_severe
+             else f"UNDERPRICED · {kind}")
     link = (f'<a href="{escape(o.deep_link)}" style="color:#2c7be5;'
             f'text-decoration:none;">View on Google Flights &rarr;</a>'
             if o.deep_link else "")
@@ -188,6 +212,8 @@ def _deal_card(d: Deal) -> str:
                          text-decoration:line-through;">
                   usual {escape(_money(d.baseline.median, o.currency))}</span>
           </div>
+          <div style="margin-top:8px;font-size:12px;color:#777;">
+                {escape(_basis_text(d, o.currency))}</div>
           <div style="margin-top:10px;font-size:14px;">{link}</div>
         </td></tr>
       </table>

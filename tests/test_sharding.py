@@ -98,13 +98,16 @@ class ShardRoundTripTest(unittest.TestCase):
             with open(p, encoding="utf-8") as fh:
                 payload = json.load(fh)
             self.assertEqual(payload["run_date"], "2026-08-07")
-            self.assertEqual(len(payload["offers"]), 2)   # reduced to cheapest
+            # cheapest per departure date: CGK has two dates, DPS one
+            self.assertEqual(len(payload["offers"]), 3)
 
             merged, errors, scanned, run_date, scanned_count = read_shards([p])
             self.assertEqual(run_date, "2026-08-07")
             self.assertEqual(errors, ["boom"])
             self.assertEqual(scanned, ["2026-08-08", "2026-08-09"])
-            self.assertEqual(merged["KUL-CGK"][0].price, 300)
+            # both CGK dates survive now, so the cheapest is the min not [0]
+            self.assertEqual(sorted(o.price for o in merged["KUL-CGK"]),
+                             [300, 350])
             self.assertEqual(merged["KUL-DPS"][0].price, 500)
             # raw count survives compaction so the digest can report it
             self.assertEqual(scanned_count, 3)

@@ -22,8 +22,10 @@ import sys
 from datetime import date, datetime, timezone
 from typing import Dict, List
 
-from .baseline import (append_observations, daily_cheapest, load_history,
-                       prune_history, save_history)
+from .baseline import (append_observations, daily_cheapest,
+                       daily_cheapest_by_date, load_date_series, load_history,
+                       prune_date_series, prune_history, record_date_prices,
+                       save_date_series, save_history)
 from .config import Config, shard_routes
 from .detector import find_deals
 from .emailer import send_email
@@ -63,17 +65,19 @@ def write_shard(path: str, today: date, offers_by_route: Dict[str, List[Offer]],
         # How many fares were actually examined, before compaction — the
         # digest reports this, not the handful of survivors.
         "offers_scanned": sum(len(v) for v in offers_by_route.values()),
-        # Only the cheapest per route/trip-type survives — that is all the
-        # baseline uses, and it keeps the artifacts (and history) small.
-        "offers": [o.to_record() for o in
-                   daily_cheapest(o for v in offers_by_route.values() for o in v)],
+        # Cheapest per departure date (not merely per route): the per-date
+        # series needs them, and the route-level cheapest is just the min of
+        # these. Still a tiny fraction of the thousands of raw offers.
+        "offers": [o.to_record() for o in daily_cheapest_by_date(
+            o for v in offers_by_route.values() for o in v)],
     }
     directory = os.path.dirname(path)
     if directory:
         os.makedirs(directory, exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2, sort_keys=True)
-    print(f"[scan] wrote {len(payload['offers'])} cheapest fares -> {path}")
+    print(f"[scan] wrote {len(payload['offers'])} per-date cheapest fares "
+          f"-> {path}")
 
 
 def read_shards(patterns: List[str]) -> tuple[Dict[str, List[Offer]], List[str],
@@ -114,10 +118,13 @@ def report(config: Config, today: date,
     """Compare against history, email the digest, then persist today's fares."""
     # Baselines must reflect PRIOR history, so evaluate before appending.
     history = load_history(config.history_path)
+    series = load_date_series(config.date_history_path)
     deals, summaries = find_deals(
-        offers_by_route, history, config.routes, config, today
+        offers_by_route, history, config.routes, config, today, series
     )
-    print(f"[report] flagged {len(deals)} deal(s)")
+    drops = sum(1 for d in deals if d.is_price_drop)
+    print(f"[report] flagged {len(deals)} deal(s): "
+          f"{drops} confirmed price drop(s), {len(deals) - drops} cheap date(s)")
 
     result = RunResult(
         run_date=today.isoformat(),
@@ -130,12 +137,25 @@ def report(config: Config, today: date,
     )
     send_email(result, config)
 
-    cheapest = daily_cheapest(o for v in offers_by_route.values() for o in v)
-    history = append_observations(history, cheapest, today.isoformat())
+    all_offers = [o for v in offers_by_route.values() for o in v]
+    per_date = daily_cheapest_by_date(all_offers)
+
+    # Route-level history: one row per route/trip-type, for the "usual
+    # cheapest" baseline and the digest.
+    history = append_observations(history, daily_cheapest(per_date),
+                                  today.isoformat())
     history = prune_history(history, config.history_window_days + 30, today)
     save_history(config.history_path, history)
-    print(f"[report] history now holds {len(history)} observations "
-          f"-> {config.history_path}")
+
+    # Per-date series: lets tomorrow tell a real price drop from a cheap date
+    # that has only just scrolled into the window.
+    series = record_date_prices(series, per_date, today.isoformat())
+    series = prune_date_series(series, today)
+    save_date_series(config.date_history_path, series)
+
+    print(f"[report] history: {len(history)} route observations, "
+          f"{len(series)} date series -> {config.history_path}, "
+          f"{config.date_history_path}")
     return result
 
 

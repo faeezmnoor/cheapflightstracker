@@ -41,6 +41,24 @@ A fare ≥20% below that baseline is a **deal**; ≥35% below is **severely
 underpriced**. `MIN_SAMPLES` (default 5) is counted in **days of history**, so
 nothing is flagged during roughly the first week while the baseline forms.
 
+### Price drop vs. cheap date
+
+The 30-day window rolls forward daily, so a new departure date comes into view
+every morning. If that date happens to be cheap, the headline fare falls —
+even though nothing got cheaper. To keep those apart, every departure date's
+price is tracked separately in
+[`data/date_prices.json`](data/date_prices.json), and each alert says which
+comparison produced it:
+
+| Badge | Meaning |
+|---|---|
+| **PRICE DROP** | This *same departure date* cost more on previous days. The email shows what it was and when. Immune to window drift — this is a real fall. |
+| **CHEAP DATE** | The date has no history yet (it just entered the window), so it is measured against the route's usual cheapest. "We can now see a cheap date", not "the price fell". |
+
+A confirmed drop always outranks a merely cheap date, however large the
+latter's headline discount. A date that has *always* been cheap stops alerting
+once it has its own history — otherwise it would fire every single day.
+
 ---
 
 ## How it works

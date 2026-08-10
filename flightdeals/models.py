@@ -69,6 +69,20 @@ class Deal:
     severity: str                  # "severe" | "deal"
     city: str = ""                 # human name; the digest shows this, not IATA
 
+    # How the discount was established. "date_drop" compares this departure
+    # date against what the *same date* cost on earlier days — immune to a
+    # cheap date merely scrolling into the rolling window. "route" compares
+    # against the route's usual cheapest, used when the date is too new to
+    # have its own history; it means "cheap date found", not "price fell".
+    basis: str = "route"
+    previous_price: Optional[float] = None   # what this date last cost
+    previous_date: Optional[str] = None      # ...and when we saw that
+    basis_samples: int = 0                   # observations behind the baseline
+
+    @property
+    def is_price_drop(self) -> bool:
+        return self.basis == "date_drop"
+
     @property
     def is_severe(self) -> bool:
         return self.severity == "severe"
