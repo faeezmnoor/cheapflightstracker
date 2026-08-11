@@ -59,6 +59,11 @@ A confirmed drop always outranks a merely cheap date, however large the
 latter's headline discount. A date that has *always* been cheap stops alerting
 once it has its own history — otherwise it would fire every single day.
 
+`MIN_DATE_SAMPLES` (default 1) is how many prior sightings a date needs before
+it is judged against itself. One makes the comparison "cheaper than this date
+was yesterday", which is the question being asked; raising it buys a steadier
+baseline at the cost of re-alerting an unchanged fare for longer.
+
 ---
 
 ## How it works

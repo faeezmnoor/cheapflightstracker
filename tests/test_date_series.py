@@ -15,7 +15,9 @@ from flightdeals.models import Offer
 
 
 def _cfg(**kw):
-    c = Config(min_samples=5, min_date_samples=2, deal_threshold=0.20,
+    # min_date_samples is left at the real default so these tests exercise
+    # shipped behaviour; tests that need a higher bar pass it explicitly.
+    c = Config(min_samples=5, deal_threshold=0.20,
                severe_threshold=0.35, history_window_days=90)
     for k, v in kw.items():
         setattr(c, k, v)
@@ -149,6 +151,34 @@ class WindowDriftTest(unittest.TestCase):
         self.assertEqual(len(deals), 1)
         self.assertTrue(deals[0].is_price_drop)
         self.assertEqual(deals[0].offer.price, 469)
+
+    def test_unchanged_fare_stops_alerting_the_very_next_day(self):
+        """The noise case seen live: Makassar 469 for 8 Sep alerted on two
+        consecutive days because the date had no history of its own. With one
+        prior sighting it is judged against itself and goes quiet."""
+        cfg = _cfg()                       # min_date_samples defaults to 1
+        offers = {"KUL-UPG": [_offer("UPG", 469)]}
+
+        # Day one: no history for 8 Sep -> route comparison, alert fires.
+        deals, _ = find_deals(offers, self.history, [self.route], cfg,
+                              self.today, date_series={})
+        self.assertEqual(deals[0].basis, "route")
+
+        # That run records the price; the next day the same fare is silent.
+        series = record_date_prices({}, [_offer("UPG", 469)], "2026-08-11")
+        deals, _ = find_deals(offers, self.history, [self.route], cfg,
+                              date(2026, 8, 12), series)
+        self.assertEqual(deals, [],
+                         "an unchanged fare must not alert a second time")
+
+    def test_a_genuine_fall_still_alerts_with_one_prior(self):
+        cfg = _cfg()
+        series = record_date_prices({}, [_offer("UPG", 469)], "2026-08-11")
+        deals, _ = find_deals({"KUL-UPG": [_offer("UPG", 330)]}, self.history,
+                              [self.route], cfg, date(2026, 8, 12), series)
+        self.assertEqual(len(deals), 1)
+        self.assertTrue(deals[0].is_price_drop)
+        self.assertEqual(deals[0].previous_price, 469.0)
 
     def test_thin_date_history_falls_back_to_route(self):
         series = record_date_prices({}, [_offer("UPG", 608)], "2026-08-09")

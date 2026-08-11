@@ -165,9 +165,12 @@ class Config:
     deal_threshold: float = 0.20        # >=20% under the usual price
     severe_threshold: float = 0.35      # >=35% under the usual price = "severe"
     min_samples: int = 5                # days of route history before flagging
-    # Prior observations of the *same departure date* before a fare can be
-    # called a price drop rather than just a cheap date.
-    min_date_samples: int = 2
+    # Prior sightings of the *same departure date* before a fare is judged
+    # against itself rather than the route. One is enough: it makes the
+    # comparison "cheaper than this date was yesterday", which is the question,
+    # and waiting for a second sighting means re-alerting an unchanged fare for
+    # an extra day.
+    min_date_samples: int = 1
     history_window_days: int = 90       # how far back "usual price" looks
 
     # --- Provider / infra -------------------------------------------------- #
@@ -235,7 +238,7 @@ class Config:
             deal_threshold=_get_float("DEAL_THRESHOLD", 0.20),
             severe_threshold=_get_float("SEVERE_THRESHOLD", 0.35),
             min_samples=_get_int("MIN_SAMPLES", 5),
-            min_date_samples=_get_int("MIN_DATE_SAMPLES", 2),
+            min_date_samples=_get_int("MIN_DATE_SAMPLES", 1),
             history_window_days=_get_int("HISTORY_WINDOW_DAYS", 90),
             provider=_get("PROVIDER", "googleflights"),
             region=_get("REGION", "my"),
