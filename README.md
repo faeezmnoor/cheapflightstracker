@@ -1,14 +1,22 @@
-# ✈️ KL → Indonesia flight-deal watcher
+# ✈️ Murah
 
-An automated daily service that scans flights from **Kuala Lumpur (KUL)** to
-**every major city in Indonesia**, learns each route's *usual* price over time,
-and **emails you the fares that are underpriced** — highlighting the severely
-underpriced ones. One-way **and** round-trip (return within 30 days) are both
-covered.
+**Statistical fare-anomaly alerts for KL → Indonesia.**
 
-It runs on **GitHub Actions** (free), pulls live fares from **Google Flights**
-(via the [`fast-flights`](https://github.com/AWeirdDev/flights) library — **no
-API key required**), and emails the digest via **Gmail SMTP**.
+*Murah* means "cheap" in both Malay and Indonesian — the languages at either
+end of every route it watches.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+![Python](https://img.shields.io/badge/python-3.9%2B-blue)
+![No API key](https://img.shields.io/badge/API%20key-not%20required-brightgreen)
+
+Every morning it scans **26 Indonesian airports** from **Kuala Lumpur (KUL)**
+across **every departure date in the next 30 days**, compares each fare against
+that route's own price history using robust statistics, and emails you only the
+ones that are genuinely unusual — not merely below average.
+
+It runs on **GitHub Actions** (free), reads live fares from **Google Flights**
+(via [`fast-flights`](https://github.com/AWeirdDev/flights) — **no API key**),
+and sends the digest over **SMTP**. Nothing to host, nothing to pay for.
 
 ---
 
@@ -16,11 +24,13 @@ API key required**), and emails the digest via **Gmail SMTP**.
 
 Every morning (09:00 Malaysia time) an email like this:
 
-> **✈️ 🔥 1 severely underpriced + 2 underpriced KL→Indonesia flights — best: KL→KNO 50% off**
+> **✈️ 🔥 3 underpriced KL→Indonesia flights (1 severe) — best: KL→Medan 50% off**
 >
-> - **KL → Medan** — **MYR 89** · 50% off · save MYR 90 · usual ~MYR 179 *(direct)*
+> - **KL → Medan** — **MYR 89** · 50% off · save MYR 90 *(direct, 12 Sep)*
+>   <br><sub>cheapest in 31 days of tracking · only 2% of tracked days were this
+>   cheap · 4.1 robust deviations below usual</sub>
 > - **KL → Jakarta** — **MYR 247** · 30% off · save MYR 107 *(1 stop)*
-> - …plus a **cheapest-today table** for every route.
+> - …plus a **cheapest-today table** for all 26 routes.
 
 ### How "underpriced" is decided
 
@@ -109,7 +119,7 @@ In this repo: **Settings → Secrets and variables → Actions → New repositor
 
 | Secret | Value |
 |--------|-------|
-| `SMTP_USER` | `faeezmnoor@gmail.com` |
+| `SMTP_USER` | the Gmail address the digest is sent *from* |
 | `SMTP_APP_PASSWORD` | the 16-char Gmail app password (no spaces) |
 | `EMAIL_TO` | where to send the digest (defaults to `SMTP_USER`) |
 
@@ -149,6 +159,22 @@ python -m unittest discover -s tests -v
 
 ---
 
+## Using it for other routes
+
+Nothing about the machinery is specific to Indonesia — only the default route
+list is. Point it anywhere by setting two variables:
+
+```bash
+ORIGIN=SIN                       # any IATA origin
+ROUTES=BKK,HKT,CNX,DMK           # any destinations
+CURRENCY=SGD  REGION=sg          # price it in the market you buy from
+```
+
+`scripts/probe_destinations.py` will tell you which candidates are actually
+reachable from a given origin before you commit 30 searches a day to each.
+
+---
+
 ## Tuning
 
 Everything is an env var (see [`.env.example`](.env.example)). The most useful:
@@ -175,6 +201,29 @@ process, so scanning is split across **4 parallel CI shards** (~15 min wall
 clock, and each shard gets its own runner IP, keeping the per-IP rate low).
 Watch the run logs: they print the offer count, a sample of any errors, and
 which routes came back empty.
+
+---
+
+## Contributing
+
+Issues and pull requests are welcome. The test suite is stdlib-only and needs
+no network — `python -m unittest discover -s tests` runs in well under a
+second, and every past bug in the detector has a regression test, so start
+there if you are changing how fares are scored.
+
+Adding a data source is deliberately small: implement `search()` on
+`FlightProvider` in `flightdeals/providers/`, and select it with `PROVIDER=`.
+
+## Disclaimer
+
+This project reads Google Flights' public web endpoint through `fast-flights`.
+There is no official free flight-price API, and this arrangement can break
+whenever Google changes their page format. It is intended for personal,
+low-volume price monitoring; please respect Google's terms of service and do
+not point it at a route list large enough to be a nuisance.
+
+Fares are informational. Always confirm the price with the airline before
+booking — an alert is a prompt to look, not a quote.
 
 ---
 
