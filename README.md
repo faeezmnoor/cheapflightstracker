@@ -28,6 +28,11 @@ Every morning (09:00 Malaysia time) an email like this:
 >   cheap · 4.1 robust deviations below usual</sub>
 > - **KL → Jakarta** — **MYR 247** · 30% off · save MYR 107 *(1 stop)*
 > - …plus a **cheapest-today table** for all 26 routes.
+>
+> Every city carries a 📍 map link — an IATA code tells you nothing about
+> whether a place is a beach or the middle of Kalimantan. The links use
+> Google's Maps URLs API, so they open the Maps app on a phone and the
+> browser on a desktop.
 
 ### How "underpriced" is decided
 

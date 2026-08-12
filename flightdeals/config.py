@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from typing import Dict, List
+from urllib.parse import quote_plus
 
 
 # --------------------------------------------------------------------------- #
@@ -102,6 +103,51 @@ ALL_INDONESIA_DESTINATIONS: Dict[str, str] = {
 DEFAULT_ROUTES: List[str] = list(ALL_INDONESIA_DESTINATIONS)
 
 
+# What to drop into Google Maps for each destination. Spelled out rather than
+# derived from the display name: "Solo" is formally Surakarta, and several
+# labels carry a parenthetical that would confuse a search ("Sorong (Raja
+# Ampat)"). Adding the country disambiguates the rest.
+DESTINATION_MAP_QUERIES: Dict[str, str] = {
+    "CGK": "Jakarta, Indonesia",
+    "DPS": "Denpasar, Bali, Indonesia",
+    "SUB": "Surabaya, Indonesia",
+    "KNO": "Medan, Indonesia",
+    "PDG": "Padang, West Sumatra, Indonesia",
+    "PKU": "Pekanbaru, Indonesia",
+    "PNK": "Pontianak, Indonesia",
+    "LOP": "Lombok, Indonesia",
+    "YIA": "Yogyakarta, Indonesia",
+    "SOC": "Surakarta, Indonesia",
+    "SRG": "Semarang, Indonesia",
+    "MLG": "Malang, Indonesia",
+    "BDO": "Bandung, Indonesia",
+    "BTJ": "Banda Aceh, Indonesia",
+    "PLM": "Palembang, Indonesia",
+    "DJB": "Jambi, Indonesia",
+    "TKG": "Bandar Lampung, Indonesia",
+    "BTH": "Batam, Indonesia",
+    "UPG": "Makassar, Indonesia",
+    "MDC": "Manado, Indonesia",
+    "KDI": "Kendari, Indonesia",
+    "BPN": "Balikpapan, Indonesia",
+    "BDJ": "Banjarmasin, Indonesia",
+    "LBJ": "Labuan Bajo, Indonesia",
+    "AMQ": "Ambon, Indonesia",
+    "SOQ": "Sorong, West Papua, Indonesia",
+}
+
+
+def google_maps_url(query: str) -> str:
+    """A map link that works everywhere.
+
+    Google's Maps URLs API is the documented cross-platform form: it renders
+    in any browser and deep-links into the Maps app on iOS and Android, so one
+    link serves desktop and phone.
+    """
+    return ("https://www.google.com/maps/search/?api=1&query="
+            + quote_plus(query))
+
+
 def shard_routes(routes: List["Route"], shard: int, shards: int) -> List["Route"]:
     """Deal routes round-robin across CI shards.
 
@@ -120,10 +166,18 @@ class Route:
     origin: str
     destination: str
     city: str
+    maps_query: str = ""
 
     @property
     def key(self) -> str:
         return f"{self.origin}-{self.destination}"
+
+    @property
+    def maps_url(self) -> str:
+        """Falls back to the display name minus any parenthetical, so a route
+        supplied via ROUTES still gets a usable link."""
+        query = self.maps_query or self.city.split("(")[0].strip()
+        return google_maps_url(query)
 
     @property
     def label(self) -> str:
@@ -225,7 +279,8 @@ class Config:
         else:
             codes = DEFAULT_ROUTES
         routes = [
-            Route(origin, code, ALL_INDONESIA_DESTINATIONS.get(code, code))
+            Route(origin, code, ALL_INDONESIA_DESTINATIONS.get(code, code),
+                  DESTINATION_MAP_QUERIES.get(code, ""))
             for code in codes
         ]
 

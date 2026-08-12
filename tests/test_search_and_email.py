@@ -175,3 +175,57 @@ class EndToEndMockTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MapLinkTest(unittest.TestCase):
+    """An IATA code and a city name say nothing about where a place is, so
+    every route carries a map link. These assert the link reaches the email —
+    threading it through config, detector and both bodies is easy to half-do."""
+
+    def _result(self, deals, summaries):
+        return RunResult("2026-08-13", "MYR", deals, summaries, 100, [])
+
+    def test_every_table_row_has_a_map_link(self):
+        from flightdeals.config import Config, Route
+        from flightdeals.detector import find_deals
+        routes = [Route("KUL", "SOQ", "Sorong (Raja Ampat)",
+                        "Sorong, West Papua, Indonesia"),
+                  Route("KUL", "LBJ", "Labuan Bajo (Komodo)",
+                        "Labuan Bajo, Indonesia")]
+        offers = {"KUL-SOQ": [Offer("KUL", "SOQ", "2026-09-01", 1400, "MYR",
+                                    "one_way")]}
+        _, summaries = find_deals(offers, [], routes, Config(), date(2026, 8, 13))
+        html = build_html(self._result([], summaries))
+        # both the priced route and the "no offers" one get a pin
+        self.assertEqual(html.count("maps/search"), 2)
+        self.assertIn("Sorong%2C+West+Papua", html)
+
+    def test_deal_card_links_to_the_map(self):
+        offer = Offer("KUL", "LBJ", "2026-09-04", 529.0, "MYR", "one_way")
+        b = Baseline("KUL-LBJ", 5, median=739.0)
+        deal = Deal(offer=offer, baseline=b, discount_pct=0.28, saving=210.0,
+                    severity="deal", city="Labuan Bajo (Komodo)",
+                    maps_url="https://www.google.com/maps/search/"
+                             "?api=1&query=Labuan+Bajo%2C+Indonesia")
+        html = build_html(self._result([deal], []))
+        self.assertIn("Where is Labuan Bajo (Komodo)?", html)
+        self.assertIn("Labuan+Bajo", html)
+        self.assertIn("Where is Labuan Bajo (Komodo)?",
+                      build_text(self._result([deal], [])))
+
+    def test_url_is_the_cross_platform_form(self):
+        """The Maps URLs API form opens in a browser and deep-links into the
+        Maps app on iOS and Android; a plain /maps/place link does neither
+        reliably."""
+        from flightdeals.config import google_maps_url
+        url = google_maps_url("Denpasar, Bali, Indonesia")
+        self.assertTrue(url.startswith(
+            "https://www.google.com/maps/search/?api=1&query="))
+        self.assertIn("Denpasar%2C+Bali%2C+Indonesia", url)
+
+    def test_unknown_destination_still_gets_a_link(self):
+        from flightdeals.config import Route
+        # no curated query: fall back to the label without its parenthetical
+        r = Route("KUL", "XXX", "Somewhere (Nice Bit)")
+        self.assertIn("query=Somewhere", r.maps_url)
+        self.assertNotIn("Nice", r.maps_url)

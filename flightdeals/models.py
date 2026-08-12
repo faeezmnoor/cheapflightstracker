@@ -68,6 +68,7 @@ class Deal:
     saving: float                  # currency units off the usual price
     severity: str                  # "severe" | "deal"
     city: str = ""                 # human name; the digest shows this, not IATA
+    maps_url: str = ""             # where in the world this actually is
 
     # How the discount was established. "date_drop" compares this departure
     # date against what the *same date* cost on earlier days — immune to a
@@ -108,6 +109,7 @@ class RouteSummary:
     # False until the baseline has MIN_SAMPLES days behind it. The digest must
     # not print a "usual" price it is not willing to compute a discount from.
     baseline_trusted: bool = False
+    maps_url: str = ""             # where in the world this actually is
 
 
 @dataclass

@@ -123,6 +123,7 @@ def find_deals(
             baseline=baseline,
             discount_pct=summary_discount,
             baseline_trusted=trusted,
+            maps_url=route.maps_url,
         ))
 
         # ---------------- alert --------------------------------------- #
@@ -169,6 +170,7 @@ def find_deals(
             saving=round(stats.median - cheapest.price, 2),
             severity=severity,
             city=route.city,
+            maps_url=route.maps_url,
             basis=basis,
             previous_price=prev_price,
             previous_date=prev_date,

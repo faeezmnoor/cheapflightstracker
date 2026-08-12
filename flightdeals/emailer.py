@@ -122,6 +122,9 @@ def build_text(result: RunResult) -> str:
             lines.append(f"    {_basis_text(d, o.currency)}")
             if o.deep_link:
                 lines.append(f"    {o.deep_link}")
+            if d.maps_url:
+                lines.append(f"    Where is {d.city or o.destination}? "
+                             f"{d.maps_url}")
     else:
         lines.append("")
         lines.append("No underpriced flights today. Cheapest fares below.")
@@ -195,6 +198,12 @@ def _deal_card(d: Deal) -> str:
     link = (f'<a href="{escape(o.deep_link)}" style="color:#2c7be5;'
             f'text-decoration:none;">View on Google Flights &rarr;</a>'
             if o.deep_link else "")
+    # An IATA code says nothing about where the place actually is.
+    if d.maps_url:
+        sep = ' &nbsp;·&nbsp; ' if link else ''
+        link += (f'{sep}<a href="{escape(d.maps_url)}" style="color:#2c7be5;'
+                 f'text-decoration:none;">&#128205; Where is '
+                 f'{escape(d.city or o.destination)}?</a>')
     return f"""
     <tr><td style="padding:0 0 14px 0;">
       <table width="100%" cellpadding="0" cellspacing="0"
@@ -229,9 +238,12 @@ def _deal_card(d: Deal) -> str:
 
 
 def _summary_row(s: RouteSummary, currency: str) -> str:
+    pin = (f' <a href="{escape(s.maps_url)}" title="Where is {escape(s.city)}?" '
+           f'style="text-decoration:none;font-size:12px;">&#128205;</a>'
+           if s.maps_url else "")
     if not s.cheapest:
         return (f'<tr><td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;">'
-                f'KL &rarr; {escape(s.city)}</td>'
+                f'KL &rarr; {escape(s.city)}{pin}</td>'
                 f'<td colspan="4" style="padding:8px 12px;color:#999;'
                 f'border-bottom:1px solid #f0f0f0;">no offers</td></tr>')
     o = s.cheapest
@@ -244,7 +256,7 @@ def _summary_row(s: RouteSummary, currency: str) -> str:
     return (
         f'<tr>'
         f'<td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;">'
-        f'KL &rarr; {escape(s.city)}</td>'
+        f'KL &rarr; {escape(s.city)}{pin}</td>'
         f'<td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;'
         f'font-weight:700;white-space:nowrap;">{escape(_money(o.price, currency))}</td>'
         f'<td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;'
