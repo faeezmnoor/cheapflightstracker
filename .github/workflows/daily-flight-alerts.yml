@@ -105,7 +105,7 @@ jobs:
         run: |
           git config user.name "flight-deals-bot"
           git config user.email "actions@github.com"
-          git add data/price_history.json data/date_prices.json
+          git add data/price_history.json data/date_prices.json data/alert_state.json
           if git diff --staged --quiet; then
             echo "No history changes to commit."
           else

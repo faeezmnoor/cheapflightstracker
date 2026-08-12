@@ -64,6 +64,58 @@ def prune_history(records: List[dict], keep_days: int, today: date) -> List[dict
 
 
 # --------------------------------------------------------------------------- #
+# Alert state: what we have already told the user
+#
+# Statistics decide whether a fare is unusual; they cannot decide whether it is
+# *news*. A fare that stays cheap remains unusual against months of history and
+# would be re-sent every morning until the median caught up. Remembering the
+# last alert per route makes repetition an explicit decision rather than a
+# side effect of the maths.
+# --------------------------------------------------------------------------- #
+def load_alert_state(path: str) -> Dict[str, dict]:
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+    except (json.JSONDecodeError, OSError):
+        return {}
+    alerts = payload.get("alerts") if isinstance(payload, dict) else None
+    return alerts if isinstance(alerts, dict) else {}
+
+
+def save_alert_state(path: str, alerts: Dict[str, dict]) -> None:
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump({"schema_version": SCHEMA_VERSION, "alerts": alerts},
+                  fh, indent=2, sort_keys=True)
+    os.replace(tmp, path)
+
+
+def should_repeat(previous: Optional[dict], price: float, today: date,
+                  improvement: float, cooldown_days: int) -> bool:
+    """Is this worth saying again?
+
+    Only when the fare has dropped materially since the last alert, or enough
+    days have passed that a reminder is useful rather than noise.
+    """
+    if not previous:
+        return True
+    last_price = previous.get("price")
+    if last_price is None:
+        return True
+    if price <= float(last_price) * (1 - improvement):
+        return True
+    last_seen = _parse_date(previous.get("date"))
+    if last_seen is None:
+        return True
+    return (today - last_seen).days >= cooldown_days
+
+
+# --------------------------------------------------------------------------- #
 # Per-departure-date price series
 #
 # The route-level history answers "is today's cheapest fare low for this

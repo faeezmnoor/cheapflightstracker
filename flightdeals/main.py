@@ -23,8 +23,9 @@ from datetime import date, datetime, timezone
 from typing import Dict, List
 
 from .baseline import (append_observations, daily_cheapest,
-                       daily_cheapest_by_date, load_date_series, load_history,
-                       prune_date_series, prune_history, record_date_prices,
+                       daily_cheapest_by_date, load_alert_state,
+                       load_date_series, load_history, prune_date_series,
+                       prune_history, record_date_prices, save_alert_state,
                        save_date_series, save_history)
 from .config import Config, shard_routes
 from .detector import find_deals
@@ -119,8 +120,9 @@ def report(config: Config, today: date,
     # Baselines must reflect PRIOR history, so evaluate before appending.
     history = load_history(config.history_path)
     series = load_date_series(config.date_history_path)
+    alerts = load_alert_state(config.alert_state_path)
     deals, summaries = find_deals(
-        offers_by_route, history, config.routes, config, today, series
+        offers_by_route, history, config.routes, config, today, series, alerts
     )
     drops = sum(1 for d in deals if d.is_price_drop)
     print(f"[report] flagged {len(deals)} deal(s): "
@@ -152,6 +154,15 @@ def report(config: Config, today: date,
     series = record_date_prices(series, per_date, today.isoformat())
     series = prune_date_series(series, today)
     save_date_series(config.date_history_path, series)
+
+    # Remember what was sent so tomorrow can tell repetition from news.
+    for deal in deals:
+        alerts[deal.offer.route_key] = {
+            "price": deal.offer.price,
+            "date": today.isoformat(),
+            "departure_date": deal.offer.departure_date,
+        }
+    save_alert_state(config.alert_state_path, alerts)
 
     print(f"[report] history: {len(history)} route observations, "
           f"{len(series)} date series -> {config.history_path}, "

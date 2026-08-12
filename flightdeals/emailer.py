@@ -75,9 +75,11 @@ def build_subject(result: RunResult) -> str:
     severe = [d for d in deals if d.is_severe]
     best = deals[0]
     city = best.city or best.offer.destination
-    lead = f"{len(deals)} underpriced KL→Indonesia flight(s)"
+    # "N severe + M underpriced" was read as N+M; severe fares are a subset.
+    noun = "flight" if len(deals) == 1 else "flights"
+    lead = f"{len(deals)} underpriced KL→Indonesia {noun}"
     if severe:
-        lead = f"\U0001f525 {len(severe)} severely underpriced + {lead}"
+        lead = f"\U0001f525 {lead} ({len(severe)} severe)"
     return (f"✈️ {lead} — best: KL→{city} "
             f"{_pct(best.discount_pct)} off")
 
@@ -157,25 +159,31 @@ def build_text(result: RunResult) -> str:
 
 
 def _basis_text(d: Deal, currency: str) -> str:
-    """Say which comparison produced the alert.
+    """State the evidence, so the number can be judged rather than trusted.
 
-    A confirmed drop and a cheap date look identical in the numbers but mean
-    different things: one says this fare fell, the other says we can now see a
-    date we could not see before.
+    Rarity leads because it is the claim that matters — how often this route
+    is actually this cheap — and the z-score follows as supporting detail.
     """
-    if d.is_price_drop:
-        was = _money(d.previous_price, currency)
-        when = _short_date(d.previous_date)
-        return (f"PRICE DROP for this date: was {was} on {when} "
-                f"({d.basis_samples} prior check(s) of this same date)")
-    return ("CHEAP DATE: no prior history for this departure date, so this is "
-            "measured against the route's usual cheapest, not a price fall")
+    bits = [d.rarity] if d.rarity else []
+    bits.append(f"{d.basis_samples} days tracked, usual "
+                f"{_money(d.baseline.median, currency)}")
+    if d.percentile <= 0.5:
+        bits.append(f"only {max(round(d.percentile * 100), 1)}% of tracked days "
+                    f"were this cheap")
+    if d.z_score <= -2:
+        bits.append(f"{abs(d.z_score):.1f} robust deviations below usual")
+    if d.is_price_drop and d.previous_price:
+        bits.append(f"this same date was {_money(d.previous_price, currency)} "
+                    f"on {_short_date(d.previous_date)}")
+    return " · ".join(bits)
 
 
 def _basis_badge(d: Deal) -> tuple[str, str]:
+    if d.is_new_low:
+        return "NEW LOW", "#c0392b"
     if d.is_price_drop:
         return "PRICE DROP", "#c0392b" if d.is_severe else "#e67e22"
-    return "CHEAP DATE", "#2c7be5"
+    return "BELOW USUAL", "#2c7be5"
 
 
 def _deal_card(d: Deal) -> str:

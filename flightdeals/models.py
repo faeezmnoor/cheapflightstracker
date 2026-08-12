@@ -79,6 +79,14 @@ class Deal:
     previous_date: Optional[str] = None      # ...and when we saw that
     basis_samples: int = 0                   # observations behind the baseline
 
+    # Statistical evidence, so the email can say *why* this is unusual rather
+    # than only by how much.
+    z_score: float = 0.0            # robust (MAD-based) deviations below usual
+    percentile: float = 1.0         # fraction of tracked days this cheap or cheaper
+    is_new_low: bool = False        # cheaper than anything on record
+    days_since_cheaper: Optional[int] = None
+    rarity: str = ""                # short human phrase, e.g. "cheapest in 12 days"
+
     @property
     def is_price_drop(self) -> bool:
         return self.basis == "date_drop"

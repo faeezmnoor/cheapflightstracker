@@ -1,21 +1,76 @@
-"""Turn raw offers + history into deals and a per-route digest."""
+"""Decide which of today's fares are genuinely unusual, and why.
+
+The rule, in one line: **alert on the route's own cheapest fare, only when it
+is rare by its own history, by a margin worth an email.**
+
+Three earlier designs failed on live data and are worth recording, because
+each failure is a constraint on this one:
+
+* Comparing today's cheapest against the *mean* of every stored offer flagged
+  something every single day — the mean of a right-skewed distribution sits
+  well above the daily low it was being compared to.
+* Comparing against yesterday's price for the *same departure date* looked
+  rigorous but rested on a single observation. Roughly 7% of dates swing more
+  than 2x day to day, mostly from scrapes that miss the cheap itineraries, so
+  a lone high reading manufactured an "85% off" alert.
+* Taking the best discount across ~30 dates per route turned that noise into a
+  search: with 30 chances, nearly every route found one date whose previous
+  reading happened to be junk. 21 of 26 routes alerted in a single morning,
+  and one alert quoted 309 while the digest showed 279 available on the same
+  route.
+
+So: one candidate per route (its cheapest fare), robust statistics rather than
+means, and several independent reasons any of which can qualify — each backed
+by an absolute floor so a few ringgit off a steady price is never "severe".
+"""
 
 from __future__ import annotations
 
 from datetime import date
 from typing import Dict, List, Optional
 
-from .baseline import DateSeries, baselines_by_route, date_baseline
+from .baseline import DateSeries, date_baseline, should_repeat
 from .config import Config, Route
 from .models import Baseline, Deal, Offer, RouteSummary
+from .stats import (PriceStats, build_daily_series, days_since_at_or_below,
+                    rarity_label, summarise)
 
 
-def _classify(discount_pct: float, config: Config) -> Optional[str]:
-    if discount_pct >= config.severe_threshold:
+def _severity(stats: PriceStats, price: float, config: Config,
+              is_new_low: bool, percentile: float, z: float) -> Optional[str]:
+    """Grade a fare, or return None if it is not worth an alert.
+
+    Every path requires a meaningful percentage discount *and* a meaningful
+    cash saving. A z-score alone is not enough: a route whose fare has been
+    identical for a week has a tiny scale, so trivial dips score extreme
+    z-values that mean nothing to a traveller.
+    """
+    discount = stats.discount_vs_median(price)
+    saving = stats.median - price
+    if discount < config.min_discount or saving < config.min_saving:
+        return None
+
+    # "Severe" has to mean rare *and* large. A z-score alone will not do: a
+    # route sitting at the same fare all week has a minuscule scale, so a 14%
+    # dip scores z = -4.75 and would shout "severely underpriced" about a
+    # saving most travellers would shrug at.
+    severe = (
+        discount >= config.severe_threshold
+        or (discount >= config.severe_discount_floor
+            and (is_new_low or percentile <= config.rare_percentile))
+    )
+    if severe:
         return "severe"
-    if discount_pct >= config.deal_threshold:
-        return "deal"
-    return None
+
+    # Rarity is the honest measure, so the z-score only qualifies a fare when
+    # the empirical percentile agrees it is towards the cheap end.
+    qualifies = (
+        discount >= config.deal_threshold
+        or is_new_low
+        or percentile <= config.rare_percentile
+        or (z <= config.deal_z and percentile <= config.z_percentile_guard)
+    )
+    return "deal" if qualifies else None
 
 
 def find_deals(
@@ -25,114 +80,107 @@ def find_deals(
     config: Config,
     today: date,
     date_series: Optional[DateSeries] = None,
+    last_alerts: Optional[Dict[str, dict]] = None,
 ) -> tuple[List[Deal], List[RouteSummary]]:
-    """Compare today's offers to the baselines built from prior history.
+    """Flag unusually cheap fares and build the per-route digest.
 
-    Two independent comparisons, in order of trustworthiness:
-
-    1. **Per departure date.** Today's fare for 8 Sep against what 8 Sep cost
-       on previous days. Like-for-like, so it cannot be fooled by the rolling
-       window sliding a cheap date into view.
-    2. **Per route.** Today's cheapest against the route's usual cheapest. Used
-       only when a date is too new to have its own history — it answers "this
-       is a cheap date", not "this fare fell".
-
-    ``history`` and ``date_series`` must be the *prior* records (before today's
-    observations are appended), so a baseline never includes what it is judging.
+    ``history`` and ``date_series`` must hold only observations from *before*
+    today, so a baseline never includes the fare it is judging.
     """
     date_series = date_series or {}
-    route_meta = {r.key: r for r in routes}
-    baselines = baselines_by_route(
-        history, route_meta.keys(), config.history_window_days, today
-    )
-
+    last_alerts = last_alerts or {}
     deals: List[Deal] = []
     summaries: List[RouteSummary] = []
-
-    def _route_baseline(offer: Offer) -> Baseline:
-        key = (offer.route_key, offer.trip_type)
-        return baselines.get(key, Baseline(offer.route_key, 0, offer.trip_type))
-
-    def _trusted(baseline: Baseline) -> bool:
-        # Same bar for the digest and for alerts, so thin history can never
-        # imply a discount.
-        return bool(baseline.is_reliable and baseline.median
-                    and baseline.samples >= config.min_samples)
+    cutoff = today.isoformat()
 
     for route in routes:
         offers = sorted(offers_by_route.get(route.key, []),
                         key=lambda o: (o.price, o.departure_date))
-
-        # ---------------- digest row: today's headline fare ---------------- #
         cheapest = offers[0] if offers else None
-        summary_baseline = (_route_baseline(cheapest) if cheapest
-                            else Baseline(route.key, 0))
+
+        daily = (build_daily_series(history, route.key,
+                                    cheapest.trip_type if cheapest else "one_way",
+                                    cutoff) if cheapest else {})
+        stats = summarise(list(daily.values())) if daily else None
+        trusted = bool(stats and stats.samples >= config.min_samples)
+
+        # ---------------- digest row ---------------------------------- #
+        baseline = Baseline(
+            route_key=route.key,
+            samples=stats.samples if stats else 0,
+            trip_type=cheapest.trip_type if cheapest else "one_way",
+            median=stats.median if stats else None,
+            minimum=stats.minimum if stats else None,
+            maximum=stats.maximum if stats else None,
+        )
         summary_discount = None
-        if cheapest and _trusted(summary_baseline) and summary_baseline.median:
-            summary_discount = round(
-                (summary_baseline.median - cheapest.price)
-                / summary_baseline.median, 4
-            )
+        if cheapest and trusted and stats and stats.median:
+            summary_discount = round(stats.discount_vs_median(cheapest.price), 4)
         summaries.append(RouteSummary(
             route_key=route.key,
             city=route.city,
             cheapest=cheapest,
-            baseline=summary_baseline,
+            baseline=baseline,
             discount_pct=summary_discount,
-            baseline_trusted=_trusted(summary_baseline),
+            baseline_trusted=trusted,
         ))
 
-        # ---------------- alerts ------------------------------------------ #
-        drops: List[Deal] = []       # this date got cheaper than it was
-        cheap_dates: List[Deal] = []  # date has no history; judged on route
-        for offer in offers:
-            median, samples, prev_price, prev_date = date_baseline(
-                date_series, offer.route_key, offer.trip_type,
-                offer.departure_date, today
-            )
-            if median and samples >= config.min_date_samples:
-                discount = (median - offer.price) / median
-                severity = _classify(discount, config)
-                if severity:
-                    drops.append(Deal(
-                        offer=offer,
-                        baseline=Baseline(offer.route_key, samples,
-                                          offer.trip_type, median=median),
-                        discount_pct=round(discount, 4),
-                        saving=round(median - offer.price, 2),
-                        severity=severity,
-                        city=route.city,
-                        basis="date_drop",
-                        previous_price=prev_price,
-                        previous_date=prev_date,
-                        basis_samples=samples,
-                    ))
-                continue
+        # ---------------- alert --------------------------------------- #
+        # Only ever the route's cheapest fare. Scoring every date and keeping
+        # the best discount is what turned per-date noise into daily spam, and
+        # it produced alerts for fares worse than the one shown in the digest.
+        if not (cheapest and trusted and stats and stats.median):
+            continue
 
-            # No history for this date yet — fall back to the route baseline.
-            route_base = _route_baseline(offer)
-            if not _trusted(route_base) or not route_base.median:
-                continue
-            discount = (route_base.median - offer.price) / route_base.median
-            severity = _classify(discount, config)
-            if severity:
-                cheap_dates.append(Deal(
-                    offer=offer,
-                    baseline=route_base,
-                    discount_pct=round(discount, 4),
-                    saving=round(route_base.median - offer.price, 2),
-                    severity=severity,
-                    city=route.city,
-                    basis="route",
-                    basis_samples=route_base.samples,
-                ))
+        z = stats.z_score(cheapest.price)
+        percentile = stats.percentile_of(cheapest.price)
+        new_low = stats.is_new_low(cheapest.price)
+        severity = _severity(stats, cheapest.price, config, new_low, percentile, z)
+        if severity is None:
+            continue
 
-        # One alert per route. A confirmed drop always beats a merely cheap
-        # date, however large the latter's headline discount looks.
-        pool = drops or cheap_dates
-        if pool:
-            deals.append(max(pool, key=lambda d: d.discount_pct))
+        # Unusual is not the same as newsworthy: a fare that stays cheap stays
+        # unusual, and would be re-sent every morning until the median caught
+        # up with it.
+        if not should_repeat(last_alerts.get(route.key), cheapest.price, today,
+                             config.repeat_improvement,
+                             config.repeat_cooldown_days):
+            continue
 
-    # Confirmed drops first, then by size of discount.
-    deals.sort(key=lambda d: (d.is_price_drop, d.discount_pct), reverse=True)
+        since = days_since_at_or_below(daily, cheapest.price)
+
+        # The per-date series only ever *annotates* an alert now. It is far too
+        # noisy to originate one, but when a date has several prior sightings
+        # it can say what this same date used to cost.
+        prev_price = prev_date = None
+        basis = "route"
+        median_for_date, date_samples, last_price, last_date = date_baseline(
+            date_series, cheapest.route_key, cheapest.trip_type,
+            cheapest.departure_date, today)
+        if date_samples >= config.min_date_samples and median_for_date:
+            if cheapest.price < median_for_date:
+                basis = "date_drop"
+                prev_price, prev_date = last_price, last_date
+
+        deals.append(Deal(
+            offer=cheapest,
+            baseline=baseline,
+            discount_pct=round(stats.discount_vs_median(cheapest.price), 4),
+            saving=round(stats.median - cheapest.price, 2),
+            severity=severity,
+            city=route.city,
+            basis=basis,
+            previous_price=prev_price,
+            previous_date=prev_date,
+            basis_samples=stats.samples,
+            z_score=round(z, 2),
+            percentile=round(percentile, 4),
+            is_new_low=new_low,
+            days_since_cheaper=since,
+            rarity=rarity_label(stats, cheapest.price, since),
+        ))
+
+    # Rarest first: a new low outranks everything, then how far below the
+    # usual price it sits.
+    deals.sort(key=lambda d: (d.is_new_low, d.discount_pct), reverse=True)
     return deals, summaries

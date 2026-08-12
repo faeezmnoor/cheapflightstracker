@@ -54,13 +54,32 @@ class DetectorTest(unittest.TestCase):
         self.assertEqual(summaries[0].cheapest.price, 290)
 
     def test_flags_a_deal(self):
+        """27% off AND an all-time low grades severe: rare and large is the
+        definition, and both halves are satisfied here."""
         hist = _history("CGK", [300, 300, 300, 300, 300])
-        offers = {"KUL-CGK": [_offer("CGK", 220)]}  # ~27% off
+        offers = {"KUL-CGK": [_offer("CGK", 220)]}  # ~27% off, new low
+        deals, _ = find_deals(offers, hist, [self.route], _cfg(), self.today)
+        self.assertEqual(len(deals), 1)
+        self.assertEqual(deals[0].severity, "severe")
+        self.assertTrue(deals[0].is_new_low)
+        self.assertAlmostEqual(deals[0].discount_pct, (300 - 220) / 300, places=3)
+        self.assertEqual(deals[0].saving, 80)
+
+    def test_moderate_discount_is_a_deal_not_severe(self):
+        """Large enough to be worth sending, not rare enough to shout about."""
+        hist = _history("CGK", [300, 300, 260, 300, 300])   # 260 already seen
+        offers = {"KUL-CGK": [_offer("CGK", 255)]}          # ~15% off
         deals, _ = find_deals(offers, hist, [self.route], _cfg(), self.today)
         self.assertEqual(len(deals), 1)
         self.assertEqual(deals[0].severity, "deal")
-        self.assertAlmostEqual(deals[0].discount_pct, (300 - 220) / 300, places=3)
-        self.assertEqual(deals[0].saving, 80)
+
+    def test_trivial_dip_is_not_worth_an_email(self):
+        """Floors: a few ringgit off a steady fare scores an extreme z-score
+        but is not news."""
+        hist = _history("CGK", [300, 300, 300, 300, 300])
+        offers = {"KUL-CGK": [_offer("CGK", 285)]}   # 5% off, saving 15
+        deals, _ = find_deals(offers, hist, [self.route], _cfg(), self.today)
+        self.assertEqual(deals, [])
 
     def test_flags_severe(self):
         hist = _history("CGK", [400, 400, 400, 400, 400])

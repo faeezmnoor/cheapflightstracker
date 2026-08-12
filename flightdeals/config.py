@@ -162,15 +162,25 @@ class Config:
     max_trip_days: int = 30
 
     # --- What counts as a "deal" ------------------------------------------ #
-    deal_threshold: float = 0.20        # >=20% under the usual price
-    severe_threshold: float = 0.35      # >=35% under the usual price = "severe"
+    # A fare qualifies on ANY of: a new low, a robust z-score, sitting in the
+    # rare tail, or a large plain discount — but always subject to the two
+    # floors below, so trivial dips never reach the inbox.
+    deal_threshold: float = 0.20        # plain discount that qualifies alone
+    severe_threshold: float = 0.35      # discount that makes a new low "severe"
+    deal_z: float = -2.0                # robust deviations below usual
+    severe_z: float = -3.0
+    rare_percentile: float = 0.10       # bottom 10% of prices ever seen
+    severe_percentile: float = 0.02
+    severe_discount_floor: float = 0.25  # "severe" needs a big saving, not just a big z
+    z_percentile_guard: float = 0.25     # a z-score only counts if rarity agrees
+    min_discount: float = 0.12          # floor: never alert on noise
+    min_saving: float = 40.0            # floor: cash worth an email
     min_samples: int = 5                # days of route history before flagging
-    # Prior sightings of the *same departure date* before a fare is judged
-    # against itself rather than the route. One is enough: it makes the
-    # comparison "cheaper than this date was yesterday", which is the question,
-    # and waiting for a second sighting means re-alerting an unchanged fare for
-    # an extra day.
-    min_date_samples: int = 1
+    # Prior sightings of the *same departure date* before that date's own
+    # history is quoted alongside an alert. Purely annotation now: per-date
+    # readings are too noisy to originate an alert, so this only controls
+    # whether we can say what this date used to cost.
+    min_date_samples: int = 3
     history_window_days: int = 90       # how far back "usual price" looks
 
     # --- Provider / infra -------------------------------------------------- #
@@ -199,6 +209,11 @@ class Config:
     # --- Storage ----------------------------------------------------------- #
     history_path: str = "data/price_history.json"
     date_history_path: str = "data/date_prices.json"
+    alert_state_path: str = "data/alert_state.json"
+    # Re-alerting the same route: needs this much further off the last alerted
+    # price, or this many days elapsed, whichever comes first.
+    repeat_improvement: float = 0.05
+    repeat_cooldown_days: int = 7
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -238,7 +253,15 @@ class Config:
             deal_threshold=_get_float("DEAL_THRESHOLD", 0.20),
             severe_threshold=_get_float("SEVERE_THRESHOLD", 0.35),
             min_samples=_get_int("MIN_SAMPLES", 5),
-            min_date_samples=_get_int("MIN_DATE_SAMPLES", 1),
+            deal_z=_get_float("DEAL_Z", -2.0),
+            severe_z=_get_float("SEVERE_Z", -3.0),
+            rare_percentile=_get_float("RARE_PERCENTILE", 0.10),
+            severe_percentile=_get_float("SEVERE_PERCENTILE", 0.02),
+            severe_discount_floor=_get_float("SEVERE_DISCOUNT_FLOOR", 0.25),
+            z_percentile_guard=_get_float("Z_PERCENTILE_GUARD", 0.25),
+            min_discount=_get_float("MIN_DISCOUNT", 0.12),
+            min_saving=_get_float("MIN_SAVING", 40.0),
+            min_date_samples=_get_int("MIN_DATE_SAMPLES", 3),
             history_window_days=_get_int("HISTORY_WINDOW_DAYS", 90),
             provider=_get("PROVIDER", "googleflights"),
             region=_get("REGION", "my"),
@@ -256,4 +279,7 @@ class Config:
             dry_run=_get_bool("DRY_RUN", False),
             history_path=_get("HISTORY_PATH", "data/price_history.json"),
             date_history_path=_get("DATE_HISTORY_PATH", "data/date_prices.json"),
+            alert_state_path=_get("ALERT_STATE_PATH", "data/alert_state.json"),
+            repeat_improvement=_get_float("REPEAT_IMPROVEMENT", 0.05),
+            repeat_cooldown_days=_get_int("REPEAT_COOLDOWN_DAYS", 7),
         )
