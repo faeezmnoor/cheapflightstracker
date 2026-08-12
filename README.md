@@ -24,45 +24,45 @@ Every morning (09:00 Malaysia time) an email like this:
 
 ### How "underpriced" is decided
 
-A fare is compared against **its own like-for-like baseline**, built from
-[`data/price_history.json`](data/price_history.json) (committed back after each
-run, so it sharpens daily). Two rules make the comparison honest:
+Airfare distributions are **right-skewed**: a hard floor at the carrier's base
+fare, a long tail of flexible and multi-stop fares, and the occasional scrape
+that misses the cheap itineraries entirely and records several times the norm.
+Mean and standard deviation are the wrong tools for that shape — a single
+9,475 reading inflates the scale enough to hide every genuine dip afterwards.
 
-1. **One-way and round-trip never share a baseline.** A return ticket costs
-   roughly double; pooling them puts "usual" between the two and makes every
-   one-way look ~50% underpriced.
-2. **"Usual" means the usual *cheapest* fare.** Each day of history is reduced
-   to its lowest fare before taking the median. We alert on today's cheapest,
-   so the baseline must be built from daily lows — averaging over every offer
-   ever stored (including 2nd- and 3rd-best) sits above the daily low and would
-   flag an ordinary fare as a bargain every single day.
+So the service uses **median and MAD** (median absolute deviation), which an
+outlier cannot move, and asks three questions of the route's own history of
+daily-cheapest fares:
 
-A fare ≥20% below that baseline is a **deal**; ≥35% below is **severely
-underpriced**. `MIN_SAMPLES` (default 5) is counted in **days of history**, so
-nothing is flagged during roughly the first week while the baseline forms.
+| Question | Measure | Why it matters |
+|---|---|---|
+| **Is it rare?** | percentile rank — *"only 20% of tracked days were this cheap"* | No distributional assumptions. The honest measure of unusual. |
+| **Is it anomalous?** | modified z-score (MAD-based) | Comparable across routes: −3 means the same on a 200 fare and a 2,000 one. |
+| **Is it a new low?** | cheaper than anything on record | Strongest signal, and naturally noise-resistant — artifacts push prices *up*, so they cannot fake a low. |
 
-### Price drop vs. cheap date
+A fare qualifies on **any** of those, or on a plain large discount, always
+behind two floors: **≥12% off and ≥MYR 40 saved**. Without them a route sitting
+at one fare all week scores z = −4.75 on a dip most travellers would shrug at.
 
-The 30-day window rolls forward daily, so a new departure date comes into view
-every morning. If that date happens to be cheap, the headline fare falls —
-even though nothing got cheaper. To keep those apart, every departure date's
-price is tracked separately in
-[`data/date_prices.json`](data/date_prices.json), and each alert says which
-comparison produced it:
+**Severe** requires *rare **and** large* — ≥35% off, or ≥25% off while also
+being a new low or in the rare tail. A big z-score alone is never enough.
 
-| Badge | Meaning |
-|---|---|
-| **PRICE DROP** | This *same departure date* cost more on previous days. The email shows what it was and when. Immune to window drift — this is a real fall. |
-| **CHEAP DATE** | The date has no history yet (it just entered the window), so it is measured against the route's usual cheapest. "We can now see a cheap date", not "the price fell". |
+Only the route's **own cheapest fare** is ever a candidate, so an alert can
+never quote a worse price than the table beneath it.
 
-A confirmed drop always outranks a merely cheap date, however large the
-latter's headline discount. A date that has *always* been cheap stops alerting
-once it has its own history — otherwise it would fire every single day.
+### Not saying the same thing twice
 
-`MIN_DATE_SAMPLES` (default 1) is how many prior sightings a date needs before
-it is judged against itself. One makes the comparison "cheaper than this date
-was yesterday", which is the question being asked; raising it buys a steadier
-baseline at the cost of re-alerting an unchanged fare for longer.
+Statistics decide whether a fare is *unusual*; they cannot decide whether it is
+*news*. A fare that stays cheap stays unusual, and would be re-sent every
+morning until the median caught up with it. `data/alert_state.json` records
+what was sent, and a route is only mentioned again once the fare drops a
+further `REPEAT_IMPROVEMENT` (5%) or `REPEAT_COOLDOWN_DAYS` (7) have passed.
+
+Every departure date's price is also tracked in
+[`data/date_prices.json`](data/date_prices.json), used to annotate an alert
+with what that same date previously cost. It is annotation only: roughly 7% of
+dates swing more than 2× day to day from scrape noise, which is far too
+unreliable to originate an alert.
 
 ---
 
