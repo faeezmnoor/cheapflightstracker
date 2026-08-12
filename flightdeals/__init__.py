@@ -1,4 +1,4 @@
-"""Murah — statistical fare-anomaly alerts.
+"""Cheap Flights Tracker — statistical fare-anomaly alerts.
 
 Scans an origin against a list of destinations across every departure date in
 a rolling window, and reports only the fares that are unusual against each

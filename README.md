@@ -1,9 +1,6 @@
-# ✈️ Murah
+# ✈️ Cheap Flights Tracker
 
-**Statistical fare-anomaly alerts for KL → Indonesia.**
-
-*Murah* means "cheap" in both Malay and Indonesian — the languages at either
-end of every route it watches.
+**Finds genuinely underpriced flights — not just below-average ones.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/python-3.9%2B-blue)
