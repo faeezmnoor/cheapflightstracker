@@ -11,9 +11,15 @@ name: Digest liveness watchdog
 # "the run happened and produced nothing", "the run failed", and "the data has
 # gone stale"; it cannot catch "GitHub stopped scheduling anything". Only an
 # off-GitHub pinger closes that last gap — see docs/RUNBOOK.md.
+# Timing matters here. The digest's cron says 01:00 UTC, but GitHub queues
+# scheduled workflows best-effort and this repo has *never* started one on
+# time: across its whole history they fired between 02:55 and 04:16 UTC, a
+# delay of 115-196 minutes. A watchdog at 04:00 would have called the 6 Aug
+# run missing while it was still running. 06:00 clears the observed worst
+# case with room to spare.
 on:
   schedule:
-    - cron: "0 4 * * *"       # 12:00 Malaysia time, well after the digest
+    - cron: "0 6 * * *"       # 14:00 Malaysia time, well clear of the digest
   workflow_dispatch:
 
 permissions:

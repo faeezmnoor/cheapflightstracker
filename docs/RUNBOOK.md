@@ -10,13 +10,24 @@ put together.
 
 Check in this order. Stop at the first that explains it.
 
+### 0. What time is it? (Do this first.)
+
+The cron says 01:00 UTC but **every scheduled run this project has ever had
+fired between 02:55 and 04:16 UTC** — 2 to 3 hours late. GitHub queues
+scheduled workflows best-effort.
+
+**Before 05:00 UTC (13:00 MYT), a missing digest is almost certainly just
+late.** Wait. Triggering a manual run "to recover the day" is how 13 Aug
+produced two contradictory emails 25 minutes apart.
+
 ### 1. Did the workflow run at all?
 
 Actions tab → **Daily flight deals**. Look for today's run with event
-`schedule`.
+`schedule`, and compare its timestamp against the last few days — the delay is
+normal and consistent.
 
-**No run listed** — the cron did not fire. This is the failure that cost 13
-Aug: renaming the default branch deregisters `schedule:` triggers, and GitHub
+**No run listed, and it is past 05:00 UTC** — then the cron really did not
+fire. Renaming the default branch deregisters `schedule:` triggers, and GitHub
 only re-registers them on push. There is no failed run to inspect, because
 there was no run.
 

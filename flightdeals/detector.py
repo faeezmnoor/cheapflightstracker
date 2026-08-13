@@ -62,12 +62,16 @@ def _severity(stats: PriceStats, price: float, config: Config,
     if severe:
         return "severe"
 
-    # Rarity is the honest measure, so the z-score only qualifies a fare when
-    # the empirical percentile agrees it is towards the cheap end.
+    # Rarity is the honest measure, so neither a z-score nor a plain discount
+    # qualifies a fare unless the empirical percentile agrees it is towards the
+    # cheap end. Without that guard on the discount path, a fare that steps
+    # down to a new level and holds there stays "20% off" until the median
+    # catches up days later — announcing an old price change as today's news.
     qualifies = (
-        discount >= config.deal_threshold
-        or is_new_low
+        is_new_low
         or percentile <= config.rare_percentile
+        or (discount >= config.deal_threshold
+            and percentile <= config.deal_percentile_guard)
         or (z <= config.deal_z and percentile <= config.z_percentile_guard)
     )
     return "deal" if qualifies else None

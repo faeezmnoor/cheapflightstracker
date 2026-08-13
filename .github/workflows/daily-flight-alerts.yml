@@ -4,11 +4,15 @@ name: Daily flight deals (KL -> Indonesia)
 # 01:00 UTC == 09:00 Malaysia time (UTC+8) — a morning digest.
 # You can also trigger it by hand from the Actions tab (Run workflow).
 #
-# The schedule is registered against the *default branch* only, and GitHub
-# re-registers it on push. Renaming the default branch therefore silently
-# stops the cron until the next commit lands — which is exactly what skipped
-# the 13 Aug digest. If a morning goes quiet, check the Actions tab for a
-# missing "schedule" run before suspecting the scanner.
+# EXPECT IT LATE. GitHub queues scheduled workflows best-effort, and no run in
+# this project's history has started on time: all have fired 02:55-04:16 UTC,
+# 115-196 minutes behind the cron. Do not conclude a run is missing before
+# ~05:00 UTC — doing so on 13 Aug produced a manual duplicate 25 minutes
+# before the real run arrived, and two contradictory emails.
+#
+# Separately (and genuinely): the schedule is registered against the *default
+# branch* and refreshed on push, so renaming that branch can stop the cron
+# until the next commit lands. Check recent run timestamps before blaming it.
 on:
   schedule:
     - cron: "0 1 * * *"

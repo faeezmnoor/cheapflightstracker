@@ -134,8 +134,7 @@ def build_text(result: RunResult) -> str:
             if o.deep_link:
                 lines.append(f"    {o.deep_link}")
             if d.maps_url:
-                lines.append(f"    Where is {d.city or o.destination}? "
-                             f"{d.maps_url}")
+                lines.append(f"    View in Google Maps: {d.maps_url}")
     else:
         lines.append("")
         lines.append("No underpriced flights today. Cheapest fares below.")
@@ -181,9 +180,16 @@ def _basis_text(d: Deal, currency: str) -> str:
     bits = [d.rarity] if d.rarity else []
     bits.append(f"{d.basis_samples} days tracked, usual "
                 f"{_money(d.baseline.median, currency)}")
-    if d.percentile <= 0.5:
+    # "only" has to earn its place. At 38% it was actively misleading — nearly
+    # four days in ten were this cheap, which is the opposite of the rarity the
+    # word implies. Above a quarter, state the figure plainly and let it temper
+    # the headline instead of pretending to support it.
+    if d.percentile <= 0.25:
         bits.append(f"only {max(round(d.percentile * 100), 1)}% of tracked days "
                     f"were this cheap")
+    elif d.percentile <= 0.5:
+        bits.append(f"{round(d.percentile * 100)}% of tracked days were this "
+                    f"cheap or cheaper")
     if d.z_score <= -2:
         bits.append(f"{abs(d.z_score):.1f} robust deviations below usual")
     if d.is_price_drop and d.previous_price:
@@ -213,8 +219,8 @@ def _deal_card(d: Deal) -> str:
     if d.maps_url:
         sep = ' &nbsp;·&nbsp; ' if link else ''
         link += (f'{sep}<a href="{escape(d.maps_url)}" style="color:#2c7be5;'
-                 f'text-decoration:none;">&#128205; Where is '
-                 f'{escape(d.city or o.destination)}?</a>')
+                 f'text-decoration:none;">&#128205; View in Google Maps '
+                 f'&rarr;</a>')
     return f"""
     <tr><td style="padding:0 0 14px 0;">
       <table width="100%" cellpadding="0" cellspacing="0"
@@ -249,7 +255,8 @@ def _deal_card(d: Deal) -> str:
 
 
 def _summary_row(s: RouteSummary, currency: str) -> str:
-    pin = (f' <a href="{escape(s.maps_url)}" title="Where is {escape(s.city)}?" '
+    pin = (f' <a href="{escape(s.maps_url)}" '
+           f'title="View {escape(s.city)} in Google Maps" '
            f'style="text-decoration:none;font-size:12px;">&#128205;</a>'
            if s.maps_url else "")
     if not s.cheapest:

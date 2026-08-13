@@ -180,5 +180,56 @@ class DetectorTest(unittest.TestCase):
         self.assertEqual(deals[0].offer.destination, "DPS")
 
 
+class StalePriceLevelTest(unittest.TestCase):
+    """A price that stepped down days ago and held is not news today.
+
+    Real incident, KL->Makassar: the fare fell 960 -> 774 -> 608 -> 469 and
+    then sat at exactly 469 for four consecutive days. Because the median still
+    reflected the old 608 level, every one of those four days scored "23% off,
+    save MYR 139" — announcing a week-old price change as today's opportunity.
+    The email gave itself away in its own supporting text: "only 38% of tracked
+    days were this cheap".
+
+    A discount must therefore also be *rare* to qualify. The genuine alert on
+    the day it actually dropped is a new low and must survive.
+    """
+
+    route = Route("KUL", "UPG", "Makassar")
+    today = date(2026, 8, 13)
+
+    def _run(self, prices, price_today):
+        hist = _history("UPG", prices)
+        return find_deals({"KUL-UPG": [_offer("UPG", price_today)]}, hist,
+                          [self.route], _cfg(), self.today)[0]
+
+    def test_the_day_it_drops_still_alerts(self):
+        deals = self._run([960, 774, 608, 608, 608], 469)
+        self.assertEqual(len(deals), 1, "a genuine new low must still alert")
+        self.assertTrue(deals[0].is_new_low)
+
+    def test_the_same_fare_days_later_does_not(self):
+        # 469 is now four of the nine tracked days — the 44th percentile.
+        deals = self._run([960, 774, 608, 608, 608, 469, 469, 469], 469)
+        self.assertEqual(deals, [],
+                         "a fare that has been the going rate for days is not "
+                         "underpriced just because the median lags")
+
+    def test_a_deep_discount_still_needs_to_be_rare(self):
+        cfg = _cfg()
+        # 30% off, comfortably over deal_threshold, but half the tracked days
+        # were this cheap or cheaper.
+        hist = _history("UPG", [1000, 1000, 1000, 700, 700, 700])
+        deals, _ = find_deals({"KUL-UPG": [_offer("UPG", 700)]}, hist,
+                              [self.route], cfg, self.today)
+        self.assertEqual(deals, [])
+
+    def test_the_guard_can_be_relaxed_by_configuration(self):
+        loose = _cfg(deal_percentile_guard=1.0)
+        hist = _history("UPG", [960, 774, 608, 608, 608, 469, 469, 469])
+        deals, _ = find_deals({"KUL-UPG": [_offer("UPG", 469)]}, hist,
+                              [self.route], loose, self.today)
+        self.assertEqual(len(deals), 1, "guard must be the only thing blocking")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -208,9 +208,11 @@ class MapLinkTest(unittest.TestCase):
                     maps_url="https://www.google.com/maps/search/"
                              "?api=1&query=Labuan+Bajo%2C+Indonesia")
         html = build_html(self._result([deal], []))
-        self.assertIn("Where is Labuan Bajo (Komodo)?", html)
+        # Worded to match the Google Flights link beside it, so the two calls
+        # to action read as a pair rather than one link and one question.
+        self.assertIn("View in Google Maps", html)
         self.assertIn("Labuan+Bajo", html)
-        self.assertIn("Where is Labuan Bajo (Komodo)?",
+        self.assertIn("View in Google Maps",
                       build_text(self._result([deal], [])))
 
     def test_url_is_the_cross_platform_form(self):

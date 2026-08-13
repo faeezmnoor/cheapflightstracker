@@ -227,6 +227,15 @@ class Config:
     severe_percentile: float = 0.02
     severe_discount_floor: float = 0.25  # "severe" needs a big saving, not just a big z
     z_percentile_guard: float = 0.25     # a z-score only counts if rarity agrees
+    # ...and neither does a plain discount. A fare that steps down to a new
+    # level and stays there keeps reading as "23% off" for as long as the old,
+    # higher prices remain in the window — the price has not dropped, the
+    # median just has not caught up. KL->Makassar sat at exactly 469 for four
+    # consecutive days while its discount stayed 23% and its percentile climbed
+    # 0% -> 17% -> 29% -> 38%. By the fourth day the email was announcing a
+    # week-old price change as today's opportunity, and saying so itself:
+    # "only 38% of tracked days were this cheap".
+    deal_percentile_guard: float = 0.25   # a discount only counts if it is still rare
     min_discount: float = 0.12          # floor: never alert on noise
     min_saving: float = 40.0            # floor: cash worth an email
     min_samples: int = 5                # days of route history before flagging
@@ -318,6 +327,7 @@ class Config:
             severe_percentile=_get_float("SEVERE_PERCENTILE", 0.02),
             severe_discount_floor=_get_float("SEVERE_DISCOUNT_FLOOR", 0.25),
             z_percentile_guard=_get_float("Z_PERCENTILE_GUARD", 0.25),
+            deal_percentile_guard=_get_float("DEAL_PERCENTILE_GUARD", 0.25),
             min_discount=_get_float("MIN_DISCOUNT", 0.12),
             min_saving=_get_float("MIN_SAVING", 40.0),
             min_date_samples=_get_int("MIN_DATE_SAMPLES", 3),

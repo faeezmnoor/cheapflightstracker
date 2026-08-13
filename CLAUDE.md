@@ -63,15 +63,25 @@ are written by the daily run and committed back by the bot. Do not hand-edit
 them — you are editing the evidence the auditor uses to check the code. If a
 fixture is needed, build it in the test.
 
-## Scheduled workflows
+## Scheduled workflows run late — always
 
-GitHub registers `schedule:` triggers **against the default branch**, and
-refreshes them on push. Renaming the default branch silently stops the cron
-until the next commit lands — no failed run, no notification, just silence.
-This has happened once (13 Aug) and cost a day's digest.
+The cron says 01:00 UTC. **No scheduled run in this project's history has ever
+started on time.** Every one has fired between 02:55 and 04:16 UTC — a delay of
+115 to 196 minutes. GitHub queues `schedule:` triggers best-effort and drops
+them under load; that is documented behaviour, not a fault here.
 
-If a morning is quiet, check the Actions tab for a missing `schedule` run
-*before* suspecting the scanner.
+**Do not declare a run missing before about 05:00 UTC (13:00 MYT).** On 13 Aug
+the digest was declared missing at 03:00 UTC, a manual run was triggered at
+03:03, and the real scheduled run arrived at 03:28 — so the user got two
+contradictory emails 25 minutes apart, one announcing a deal and one announcing
+none. The outage was imaginary; the duplicate was not.
+
+A separate, real hazard: GitHub registers `schedule:` triggers against the
+**default branch** and refreshes them on push, so renaming the default branch
+can stop the cron until the next commit lands. That is worth knowing, but it
+was *not* what happened on 13 Aug. Check the timestamps of recent `schedule`
+runs before reaching for it — if they show the usual 2-3 hour delay, the
+schedule is fine and you are simply early.
 
 ## Verifying your own edits actually applied
 

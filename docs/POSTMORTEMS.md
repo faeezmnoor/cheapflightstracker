@@ -89,15 +89,33 @@ rendered HTML checked directly.
 **Guarded by** — `C7`, plus the standing rule in `CLAUDE.md`: verify a
 rendering change by counting the rendered output, never by a passing test.
 
-### 8. Renaming the default branch deregistered the cron
-**Symptom** — no digest on 13 Aug. No failed run, no notification, nothing in
-the Actions tab at all.
-**Cause** — GitHub registers `schedule:` triggers against the default branch
-and refreshes them on push. The rename dropped the registration.
-**Fix** — a commit re-registered it; the failure mode is documented in the
-workflow header.
-**Guarded by** — `D1`/`D2` (history stops advancing) and the liveness watchdog.
-**Partially.** See below — this one is not fully solved.
+### 8. A missing digest that was never missing — and the duplicate it caused
+**Symptom** — no digest by 11:00 MYT on 13 Aug. Nothing in the Actions tab.
+**Diagnosis at the time** — that renaming the default branch had deregistered
+the cron. A manual run was triggered at 03:03 UTC to recover the day.
+**What actually happened** — the scheduled run fired normally at 03:28 UTC, 25
+minutes later. The user received **two contradictory emails**: "1 underpriced
+flight — KL→Makassar 23% off" at 11:18 MYT, then "No KL→Indonesia deals today"
+at 11:43. The second was correct behaviour — repeat-suppression had already
+recorded the Makassar alert — but the pair reads as the service contradicting
+itself.
+**Real cause** — the run was *late, not missing*, and the conclusion was drawn
+two hours too early. Every scheduled run in this project's history has fired
+between 02:55 and 04:16 UTC against a 01:00 cron; 03:00 UTC is earlier than
+five of the eight recorded firings. The evidence at the time ("no run yet")
+was equally consistent with "delayed" and "deregistered", and the wrong one
+was chosen with more confidence than the evidence supported.
+**Fix** — the delay is documented in `CLAUDE.md` and `docs/RUNBOOK.md` with a
+"do not declare it missing before 05:00 UTC" rule; the liveness watchdog moved
+from 04:00 to 06:00 UTC, since at 04:00 it would have called the 6 Aug run
+(fired 04:16) missing while it was still running.
+**Guarded by** — `D1`/`D2` and the watchdog, for genuine outages. Nothing
+prevents a human from triggering a duplicate run by hand — which is why the
+timing rule is written down rather than encoded.
+
+**The lesson is about diagnosis, not scheduling.** "No run yet" is absence of
+evidence. Checking when runs *historically* fire would have cost one API call
+and avoided the duplicate entirely.
 
 ### 9. `--dry-run` wrote to the real price history
 **Symptom** — found while building the QA layer, not in production. Running
@@ -127,9 +145,49 @@ installed the dependencies on any version but 3.11.
 **Guarded by** — the CI matrix itself. A version claim that is not built is
 not a claim, it is a guess.
 
+### 11. A stale price level kept reading as a fresh discount
+**Symptom** — the 13 Aug digest led with "KL→Makassar 23% off, save MYR 139".
+The fare had been exactly 469 for four consecutive days.
+**Cause** — the only rarity requirement was on the z-score path. A plain
+`discount >= 20%` qualified on its own, so when a route steps down to a new
+level and holds there, it keeps scoring the same discount until the median
+finally catches up. Makassar ran 960 → 774 → 608 → 608 → 608 → 469 → 469 →
+469 → 469, and the "usual 608" was a price that no longer existed. Its
+percentile climbed 0% → 17% → 29% → 38% across those days, visibly recording
+that the fare had become ordinary while the headline still said 23% off.
+**The email said so itself** — "only 38% of tracked days were this cheap" —
+and the word "only" was applied to anything under 50%, so a figure that
+contradicted the headline was dressed up as though it supported it.
+**Fix** — `deal_percentile_guard` (0.25): a discount must also be rare. And
+"only" now requires ≤25%; above that the percentile is stated plainly, so it
+tempers the claim instead of flattering it.
+**Effect on real history** — both genuine new lows on 10 Aug survive, as does
+11 Aug at the 17th percentile. The 40th-percentile LBJ and 29th-percentile UPG
+alerts on 12 Aug drop, and 13 Aug goes from one stale alert to none.
+**Guarded by** — four regression tests reconstructing the Makassar series, and
+the replay harness, which now shows the difference on recorded data.
+
 ---
 
 ## Known risks, not yet guarded
+
+### Intra-day scrape variance is larger than expected
+On 13 Aug two runs happened 25 minutes apart, giving an unplanned controlled
+experiment. Two routes disagreed:
+
+| Route | 11:18 run | 11:43 run | Spread |
+|---|---|---|---|
+| KL→Manado | MYR 820 (6 Sep) | MYR 1,107 (1 Sep) | **1.35×** |
+| KL→Denpasar | MYR 428 (12 Sep) | MYR 459 (6 Sep) | 1.07× |
+
+Fares do not move 35% in 25 minutes. The later scrape simply failed to see the
+6 Sep itinerary. History self-heals — `daily_cheapest` keeps the minimum across
+runs, so 820 was stored — but **the email reports the run's own scrape**, so
+the second digest showed 1,107 for a route the system already knew cost 820.
+
+No check catches this: a single run has nothing to compare against. The honest
+mitigation would be scanning each route twice and taking the minimum, at double
+the request budget. Recorded rather than fixed.
 
 Honest list. These are the things that would hurt next.
 
