@@ -26,9 +26,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.9 is the floor the README advertises; 3.11 is what the daily job
-        # actually runs on. Both, or the promise is untested.
-        python-version: ["3.9", "3.11"]
+        # The floor the README advertises, and the version the daily job
+        # actually runs on. Both, or the promise is untested — this matrix
+        # caught the README claiming 3.9 support on its first run, when
+        # fast-flights has required >=3.10 all along.
+        python-version: ["3.10", "3.11"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

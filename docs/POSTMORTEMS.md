@@ -117,6 +117,16 @@ runs. The render count dropped from 48 to 26 because the first run had polluted
 the history the second run compared against. Checking output rather than
 intent is the whole method.
 
+### 10. README advertised Python 3.9 support that never existed
+**Symptom** — caught by the new CI matrix on its first run: `pip install -r
+requirements.txt` failed outright on 3.9.
+**Cause** — `fast-flights` has required `>=3.10` all along. The badge was
+written from assumption and never tested, because until now nothing in CI
+installed the dependencies on any version but 3.11.
+**Fix** — badge corrected to 3.10+, matrix floor moved to 3.10.
+**Guarded by** — the CI matrix itself. A version claim that is not built is
+not a claim, it is a guess.
+
 ---
 
 ## Known risks, not yet guarded

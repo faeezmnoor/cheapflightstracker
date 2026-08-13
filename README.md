@@ -3,7 +3,7 @@
 **Finds genuinely underpriced flights — not just below-average ones.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-![Python](https://img.shields.io/badge/python-3.9%2B-blue)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![No API key](https://img.shields.io/badge/API%20key-not%20required-brightgreen)
 
 Every morning it scans **26 Indonesian airports** from **Kuala Lumpur (KUL)**
