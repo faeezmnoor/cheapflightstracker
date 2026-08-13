@@ -1,0 +1,69 @@
+name: Digest liveness watchdog
+
+# Runs two hours after the digest and asks one question: did yesterday's data
+# actually land? It exists because on 13 Aug the daily job did not run at all —
+# renaming the default branch dropped its cron registration — and nothing
+# noticed. There was no failed run to look at, because there was no run.
+#
+# KNOWN LIMIT, stated plainly: this watchdog is itself a scheduled workflow on
+# the same default branch, so the one failure it most wants to catch (all
+# schedules silently deregistered) can take it down too. It reliably catches
+# "the run happened and produced nothing", "the run failed", and "the data has
+# gone stale"; it cannot catch "GitHub stopped scheduling anything". Only an
+# off-GitHub pinger closes that last gap — see docs/RUNBOOK.md.
+on:
+  schedule:
+    - cron: "0 4 * * *"       # 12:00 Malaysia time, well after the digest
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Is the price history still being written?
+        id: liveness
+        run: python scripts/check_liveness.py
+
+      # Only speaks up when something is actually wrong, and reuses one issue
+      # rather than opening a fresh one every morning of an outage.
+      - name: Raise an issue if the digest has gone quiet
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'Digest liveness: no fresh price data';
+            const body = [
+              'The liveness watchdog found no recent price history.',
+              '',
+              'That usually means the daily digest did not run, or ran and',
+              'produced nothing. Check the Actions tab for a missing',
+              '`schedule` run before suspecting the scanner — a renamed',
+              'default branch silently deregisters the cron.',
+              '',
+              `Watchdog run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            ].join('\n');
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'liveness',
+            });
+            if (existing.data.length) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.data[0].number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ['liveness'],
+              });
+            }

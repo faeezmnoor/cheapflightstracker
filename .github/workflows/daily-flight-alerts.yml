@@ -106,6 +106,18 @@ jobs:
           DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: python run.py --report "observations/*.json"
 
+      # The exact digest that was sent, and the payload the auditor judged it
+      # by. When an email looks wrong, this pair reproduces the decision
+      # offline — no re-scraping, no guessing what the numbers were that day.
+      - name: Keep the digest as evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Commit updated price history
         if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
@@ -123,3 +135,16 @@ jobs:
               git pull --rebase origin "${GITHUB_REF_NAME}" || true
             done
           fi
+
+      # The send is already gated in-process: `report()` audits the digest
+      # before handing it to SMTP and withholds alerts it cannot stand behind.
+      # This step re-runs the same checks so the result is *visible* — a red X
+      # on the run and a table in the job summary. A gate nobody can see gets
+      # quietly forgotten.
+      - name: Audit the digest that was sent
+        if: always()
+        run: |
+          python -m qa.audit \
+            --digest artifacts/digest.json \
+            --history data/price_history.json \
+            --html artifacts/digest.html

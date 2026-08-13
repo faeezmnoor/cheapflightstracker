@@ -1,0 +1,61 @@
+name: CI
+
+# Until now the test suite only ever ran on a laptop, which meant a broken
+# push was discovered by tomorrow's digest rather than by this repository.
+# Every change now runs the tests before it can become a release.
+on:
+  push:
+    branches: ["**"]
+    paths-ignore:
+      # The bot's own history commits touch nothing executable.
+      - "data/**"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 is the floor the README advertises; 3.11 is what the daily job
+        # actually runs on. Both, or the promise is untested.
+        python-version: ["3.9", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -r requirements.txt
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+
+      # The offline provider exercises the whole pipeline — search, baseline,
+      # detector, QA gate, both email bodies — without a network call. It has
+      # caught more real breakage than any single unit test.
+      - name: End-to-end smoke test (mock provider, no network)
+        run: python run.py --provider mock --dry-run
+
+  # The auditor is the thing standing between a wrong number and an inbox, so
+  # it gets checked against real recorded history, not just fixtures.
+  audit-replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+
+      - name: Replay the most recent run past the auditor
+        run: python scripts/replay_audit.py --strict

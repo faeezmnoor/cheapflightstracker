@@ -70,6 +70,10 @@ def _short_when(offer: Offer) -> str:
 # --------------------------------------------------------------------------- #
 def build_subject(result: RunResult) -> str:
     deals = result.deals
+    if result.qa_withheld and not deals:
+        # Never let a QA failure read as "no deals today" — they look the same
+        # in an inbox, and the quiet one is the dangerous one.
+        return f"⚠️ KL→Indonesia digest — alerts withheld by QA ({result.run_date})"
     if not deals:
         return f"✈️ No KL→Indonesia deals today ({result.run_date})"
     severe = [d for d in deals if d.is_severe]
@@ -104,6 +108,13 @@ def build_text(result: RunResult) -> str:
     lines.append(f"Origin: KL   Currency: {result.currency}   "
                  f"Offers checked: {result.offers_checked}")
     lines.append("=" * 60)
+
+    if result.qa_withheld:
+        lines.append("")
+        lines.append("!! ALERTS WITHHELD BY QA")
+        for reason in result.qa_withheld:
+            lines.append(f"   - {reason}")
+        lines.append("   Today's cheapest fares are still listed below.")
 
     if result.deals:
         lines.append("")
@@ -270,6 +281,30 @@ def _summary_row(s: RouteSummary, currency: str) -> str:
     )
 
 
+def _qa_banner(result: RunResult) -> str:
+    """Say plainly when QA withheld something.
+
+    An email that quietly drops its alerts is indistinguishable from a morning
+    with no deals, so a failed check would look like good news. It gets a
+    banner instead.
+    """
+    if not result.qa_withheld:
+        return ""
+    reasons = "".join(f"<li>{escape(r)}</li>" for r in result.qa_withheld)
+    return (
+        '<tr><td style="padding:0 0 16px 0;">'
+        '<table width="100%" cellpadding="0" cellspacing="0" '
+        'style="border:1px solid #f0c36d;border-left:5px solid #e67e22;'
+        'border-radius:6px;background:#fffaf0;">'
+        '<tr><td style="padding:12px 16px;font-size:13px;color:#7a4b00;">'
+        '<strong>&#9888;&#65039; Alerts withheld by QA.</strong> The fares '
+        'below are still today\'s cheapest, but the underpriced list failed '
+        'an integrity check and was suppressed rather than sent wrong:'
+        f'<ul style="margin:8px 0 0;padding-left:18px;">{reasons}</ul>'
+        '</td></tr></table></td></tr>'
+    )
+
+
 def build_html(result: RunResult) -> str:
     deals_html = "".join(_deal_card(d) for d in result.deals)
     if not deals_html:
@@ -303,6 +338,7 @@ def build_html(result: RunResult) -> str:
         {result.offers_checked} fares checked &middot; {escape(result.currency)}</div>
     </td></tr>
 
+    {_qa_banner(result)}
     <tr><td style="font-size:15px;font-weight:700;color:#333;padding:6px 0 10px;">
       Underpriced flights</td></tr>
     <tr><td><table width="100%" cellpadding="0" cellspacing="0">{deals_html}</table></td></tr>

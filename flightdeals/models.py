@@ -124,3 +124,8 @@ class RunResult:
     # these — Google prices each date separately, so stating the window keeps
     # the digest from reading as "the cheapest date that exists".
     scanned_departures: List[str] = field(default_factory=list)
+    # Set when the QA gate withheld alerts it could not stand behind. The
+    # digest says so out loud: silently sending a shorter list would look
+    # identical to a quiet market, which is how bad statistics went unnoticed
+    # for days at a time.
+    qa_withheld: List[str] = field(default_factory=list)

@@ -264,6 +264,10 @@ class Config:
     history_path: str = "data/price_history.json"
     date_history_path: str = "data/date_prices.json"
     alert_state_path: str = "data/alert_state.json"
+    # Where the QA auditor picks the digest up. Written every run;
+    # uploaded as a CI artifact so a suspect email can be re-examined
+    # offline without re-scraping anything.
+    digest_artifact_path: str = "artifacts/digest.json"
     # Re-alerting the same route: needs this much further off the last alerted
     # price, or this many days elapsed, whichever comes first.
     repeat_improvement: float = 0.05
@@ -335,6 +339,8 @@ class Config:
             history_path=_get("HISTORY_PATH", "data/price_history.json"),
             date_history_path=_get("DATE_HISTORY_PATH", "data/date_prices.json"),
             alert_state_path=_get("ALERT_STATE_PATH", "data/alert_state.json"),
+            digest_artifact_path=_get("DIGEST_ARTIFACT_PATH",
+                                      "artifacts/digest.json"),
             repeat_improvement=_get_float("REPEAT_IMPROVEMENT", 0.05),
             repeat_cooldown_days=_get_int("REPEAT_COOLDOWN_DAYS", 7),
         )

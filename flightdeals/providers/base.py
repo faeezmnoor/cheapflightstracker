@@ -17,6 +17,12 @@ class FlightProvider:
 
     name = "base"
 
+    # Whether requests leave the machine. The inter-request pause exists to
+    # keep a remote service from throttling us; a provider that talks to
+    # nobody has nothing to be polite to, and pausing anyway turns an offline
+    # smoke test into a 39-minute one (26 routes x 30 dates x 3s).
+    offline = False
+
     def __init__(self, config: Config):
         self.config = config
 

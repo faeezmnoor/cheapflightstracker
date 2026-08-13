@@ -78,6 +78,41 @@ unreliable to originate an alert.
 
 ---
 
+## How it checks itself
+
+Every defect this project has shipped produced a *plausible* email — arriving on
+time, rendering correctly, and wrong. None of them crashed, and the test suite
+was green for all of them. So "it ran" is not treated as evidence of anything.
+
+The [`qa/`](qa/) package re-derives the numbers from raw price history with a
+**second, independently written implementation** and compares them against what
+the email claims. It deliberately does not import `flightdeals` — two
+derivations that agree is evidence; one implementation checking itself is not.
+
+Twelve checks, each traceable to a real incident in
+[`docs/POSTMORTEMS.md`](docs/POSTMORTEMS.md):
+
+| | Checks |
+|---|---|
+| **Digest** | alert never quotes a worse price than the table · alert rate stays plausible · no alert on a thin baseline · the numbers agree with each other · claimed baselines reproduce from history · one run, one currency · what rendered matches what was computed |
+| **Data** | history reaches yesterday · no missing days · no route silently returning nothing · window scanned exhaustively · most-routes-empty means an outage, not a quiet market |
+
+It runs **before the email is sent**. A blocking finding withholds the alerts
+and says so in a banner, keeping the cheapest-today table — because a silently
+shorter email is indistinguishable from a quiet morning, which is how several
+incidents ran unnoticed for days.
+
+```bash
+python scripts/replay_audit.py --all     # replay every recorded day past the auditor
+python scripts/check_liveness.py         # did the job run at all?
+```
+
+`replay_audit.py` is the real pre-merge gate: it re-runs past days against real
+recorded history, so a change that would have sent a wrong email on a day that
+actually happened fails in CI rather than in an inbox.
+
+---
+
 ## How it works
 
 ```

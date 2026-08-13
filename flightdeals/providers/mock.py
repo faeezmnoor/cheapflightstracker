@@ -35,6 +35,7 @@ def _jitter(*parts: str) -> float:
 
 
 class MockProvider(FlightProvider):
+    offline = True
     name = "mock"
 
     def search(

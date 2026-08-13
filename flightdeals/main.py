@@ -27,9 +27,10 @@ from .baseline import (append_observations, daily_cheapest,
                        load_date_series, load_history, prune_date_series,
                        prune_history, record_date_prices, save_alert_state,
                        save_date_series, save_history)
+from .artifact import digest_payload, write_digest
 from .config import Config, shard_routes
 from .detector import find_deals
-from .emailer import send_email
+from .emailer import build_html, send_email
 from .models import Offer, RunResult
 from .providers import get_provider
 from .search import plan_date_pairs, run_searches
@@ -111,6 +112,51 @@ def read_shards(patterns: List[str]) -> tuple[Dict[str, List[Offer]], List[str],
 
 
 # --------------------------------------------------------------------------- #
+# Quality gate
+# --------------------------------------------------------------------------- #
+def _qa_gate(result: RunResult, history: List[dict], config: Config) -> None:
+    """Audit the digest before it is sent, and withhold alerts that fail.
+
+    The gate degrades rather than aborts: a blocking finding means the
+    *statistics* are untrustworthy, not that today's fares are. Suppressing the
+    alerts while still sending the cheapest-today table keeps the useful half
+    of the email and makes the failure visible, which is the opposite of every
+    incident this project has had — all of which shipped confident, wrong
+    numbers to an inbox and were caught days later by a human.
+
+    Imported lazily so the QA package stays an optional add-on: a checkout
+    without it still sends mail rather than crashing at the last step.
+    """
+    try:
+        from qa.checks import audit
+    except ImportError:                                  # pragma: no cover
+        print("[qa] auditor unavailable — sending unaudited")
+        return
+
+    html = build_html(result)
+    payload = digest_payload(result, config)
+    report_ = audit(payload, history, html)
+    print(f"[qa] {report_.render()}")
+
+    if config.digest_artifact_path:
+        write_digest(config.digest_artifact_path, result, html, config,
+                     qa=report_.findings)
+
+    if report_.blocking:
+        # De-duplicate: one line per distinct problem, not one per route, or a
+        # systemic fault fills the banner with thirty identical sentences.
+        reasons: List[str] = []
+        for finding in report_.blocking:
+            reason = finding.message
+            if reason not in reasons:
+                reasons.append(reason)
+        print(f"[qa] withholding {len(result.deals)} alert(s): "
+              f"{len(report_.blocking)} blocking finding(s)")
+        result.qa_withheld = reasons
+        result.deals = []
+
+
+# --------------------------------------------------------------------------- #
 # Reporting
 # --------------------------------------------------------------------------- #
 def report(config: Config, today: date,
@@ -137,7 +183,23 @@ def report(config: Config, today: date,
         errors=errors,
         scanned_departures=scanned,
     )
+
+    # QA runs *before* the send, so a wrong alert is caught rather than
+    # delivered. It is deliberately given `history` — the state the detector
+    # saw — and re-derives every claim from it independently.
+    _qa_gate(result, history, config)
+
     send_email(result, config)
+
+    # A dry run is a preview, and a preview must not change the thing it is
+    # previewing. This used to persist regardless of the flag, so
+    # `--provider mock --dry-run` wrote invented fares straight into the real
+    # price history — corrupting the baselines that every future alert is
+    # judged against, from a command whose entire purpose is to be harmless.
+    if config.dry_run:
+        print("[report] dry run — history, date series and alert state "
+              "left untouched")
+        return result
 
     all_offers = [o for v in offers_by_route.values() for o in v]
     per_date = daily_cheapest_by_date(all_offers)
