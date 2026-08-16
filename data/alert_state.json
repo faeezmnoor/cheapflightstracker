@@ -15,6 +15,11 @@
       "departure_date": "2026-09-01",
       "price": 820.0
     },
+    "KUL-SUB": {
+      "date": "2026-08-16",
+      "departure_date": "2026-09-06",
+      "price": 369.0
+    },
     "KUL-UPG": {
       "date": "2026-08-13",
       "departure_date": "2026-09-08",
