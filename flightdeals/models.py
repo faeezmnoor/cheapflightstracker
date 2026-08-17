@@ -110,6 +110,17 @@ class RouteSummary:
     # not print a "usual" price it is not willing to compute a discount from.
     baseline_trusted: bool = False
     maps_url: str = ""             # where in the world this actually is
+    # How much of the scanned window this route actually returned. "Cheapest"
+    # over 1 date and over 30 is the same word for very different claims, and
+    # the difference is invisible in the price alone.
+    dates_seen: int = 0
+    dates_scanned: int = 0
+
+    @property
+    def coverage(self) -> Optional[float]:
+        if not self.dates_scanned:
+            return None
+        return self.dates_seen / self.dates_scanned
 
 
 @dataclass

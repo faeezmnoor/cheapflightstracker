@@ -267,6 +267,16 @@ def _summary_row(s: RouteSummary, currency: str) -> str:
     o = s.cheapest
     usual = (_money(s.baseline.median, currency)
              if s.baseline_trusted else "building…")
+    # A price drawn from 2 of 30 dates is not this route's cheapest fare, it is
+    # the smallest of a handful of samples — and because missing dates are
+    # disproportionately the cheap ones, it reads high. Say so on the row
+    # rather than letting it sit next to fully scanned routes as an equal.
+    thin_note = ""
+    coverage = s.coverage
+    if coverage is not None and coverage < 0.25:
+        thin_note = (f'<br><span style="font-size:11px;color:#c0392b;">'
+                     f'partial scan &middot; only {s.dates_seen} of '
+                     f'{s.dates_scanned} dates returned</span>')
     # A negative "discount" means it's pricier than usual — don't call it "off".
     has_saving = bool(s.discount_pct and s.discount_pct > 0)
     disc = _pct(s.discount_pct) if has_saving else ""
@@ -276,7 +286,8 @@ def _summary_row(s: RouteSummary, currency: str) -> str:
         f'<td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;">'
         f'KL &rarr; {escape(s.city)}{pin}</td>'
         f'<td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;'
-        f'font-weight:700;white-space:nowrap;">{escape(_money(o.price, currency))}</td>'
+        f'font-weight:700;white-space:nowrap;">'
+        f'{escape(_money(o.price, currency))}{thin_note}</td>'
         f'<td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;'
         f'color:#666;font-size:13px;white-space:nowrap;">'
         f'{escape(_short_when(o))}</td>'

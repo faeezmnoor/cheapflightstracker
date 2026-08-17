@@ -28,6 +28,7 @@ from typing import List, Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flightdeals.artifact import digest_payload
+from flightdeals.baseline import load_date_series
 from flightdeals.config import Config
 from flightdeals.detector import find_deals
 from flightdeals.emailer import build_html
@@ -45,21 +46,52 @@ def load_observations(path: str) -> List[dict]:
     return raw.get("observations", []) if isinstance(raw, dict) else (raw or [])
 
 
+def offers_from_series(series: dict, run_date: str) -> List[Offer]:
+    """Rebuild that day's per-date fares from the per-departure-date series.
+
+    ``price_history.json`` keeps only one row per route per day — the daily
+    cheapest — so reconstructing a run from it yields a single departure date
+    per route and makes every route look like a 1-of-30 partial scan. The
+    per-date series is what the scan actually saw, so coverage-sensitive checks
+    need it to mean anything.
+    """
+    offers: List[Offer] = []
+    for key, by_day in series.items():
+        if key.count("|") != 2:
+            continue                       # schema_version and friends
+        route_key, trip_type, departure = key.split("|")
+        price = by_day.get(run_date)
+        if price is None:
+            continue
+        origin, _, destination = route_key.partition("-")
+        offers.append(Offer(origin=origin, destination=destination,
+                            departure_date=departure, price=float(price),
+                            currency="MYR", trip_type=trip_type,
+                            observed_date=run_date))
+    return offers
+
+
 def replay(observations: List[dict], run_date: str, config: Config,
            series: dict) -> tuple:
     prior = [o for o in observations if (o.get("observed_date") or "") < run_date]
-    today = [Offer.from_record(o) for o in observations
-             if o.get("observed_date") == run_date]
+    today = offers_from_series(series, run_date)
+    if not today:
+        # Days predating the per-date series still replay, just without any
+        # meaningful coverage signal.
+        today = [Offer.from_record(o) for o in observations
+                 if o.get("observed_date") == run_date]
     by_route: dict = {}
     for offer in today:
         by_route.setdefault(offer.route_key, []).append(offer)
 
     as_date = date.fromisoformat(run_date)
+    scanned = sorted({d for d, _ in plan_date_pairs(config, as_date)})
     deals, summaries = find_deals(by_route, prior, config.routes, config,
-                                  as_date, series, {})
+                                  as_date, series, {},
+                                  scanned_departures=scanned)
     result = RunResult(
         run_date, config.currency, deals, summaries, len(today), [],
-        scanned_departures=sorted({d for d, _ in plan_date_pairs(config, as_date)}),
+        scanned_departures=scanned,
     )
     return result, prior
 
@@ -80,10 +112,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("[replay] no recorded history — nothing to replay (not a failure)")
         return 0
 
-    series = {}
-    if os.path.exists(args.series):
-        with open(args.series, "r", encoding="utf-8") as fh:
-            series = json.load(fh)
+    # Use the service's own loader: the file wraps the series under a "series"
+    # key, and reading it raw silently yields an empty mapping — which looks
+    # exactly like "no per-date history yet" rather than like a bug.
+    series = load_date_series(args.series)
+    print(f"[replay] {len(series)} per-date series loaded from {args.series}")
 
     config = Config.from_env()
     days = sorted({o["observed_date"] for o in observations

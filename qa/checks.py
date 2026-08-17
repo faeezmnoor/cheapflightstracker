@@ -49,6 +49,11 @@ DEAD_ROUTE_DAYS = 5
 # Past this share, the common cause is the provider, not the airlines.
 MAX_EMPTY_ROUTE_RATE = 0.5
 
+# Below this share of the scanned window, a route's cheapest fare is the
+# minimum of a sample rather than of the window. Mirrors MIN_DATE_COVERAGE
+# in the service, restated here so the auditor keeps its own threshold.
+MIN_DATE_COVERAGE = 0.25
+
 
 def _close(a: Optional[float], b: Optional[float]) -> bool:
     if a is None or b is None:
@@ -413,6 +418,43 @@ def check_coverage(digest: dict, report: AuditReport) -> None:
             evidence=f"{len(empty)}/{len(summaries)} routes empty"))
 
 
+def check_date_coverage(digest: dict, report: AuditReport) -> None:
+    """D7 — a "cheapest" built on a fraction of the window is not a minimum.
+
+    Incident (17 Aug): the provider returned prices for 1 of 30 departure dates
+    on KL->Ambon, 3 of 30 on KL->Banjarmasin, and similar on four more routes.
+    The digest reported those samples as each route's cheapest fare, in the same
+    column and the same styling as routes with 30 dates, beneath a footnote
+    stating the figures were "cheapest across the 30 departure dates scanned".
+    Ambon read MYR 1,787 against 794 the day before; Banjarmasin 878 against
+    429. Every distorted route moved *upward*, between +22% and +125% — missing
+    dates are disproportionately the cheap ones, so a thin scan always reads
+    high.
+
+    `D4` did not catch it: that check asks how many dates were *scanned*, which
+    was a correct 30. Nothing asked how many came back.
+    """
+    report.ran("D7")
+    scanned = len(set(digest.get("scanned_departures") or []))
+    if not scanned:
+        return
+    thin = []
+    for summary in digest.get("summaries", []):
+        if summary.get("price") is None:
+            continue                       # an empty route is D3/D6's business
+        seen = summary.get("dates_seen")
+        if seen is None:
+            continue                       # older payloads did not record it
+        if seen < scanned * MIN_DATE_COVERAGE:
+            thin.append(f"{summary['route_key']} {seen}/{scanned}")
+    if thin:
+        report.add(Finding(
+            "D7", WARN,
+            "routes priced from a fraction of the window — these read high, "
+            "because the dates that go missing are the cheap ones",
+            evidence=f"{len(thin)}: {'; '.join(sorted(thin)[:8])}"))
+
+
 def check_price_swings(history: List[dict], digest: dict, run_date: str,
                        report: AuditReport) -> None:
     """D5 — flag implausible day-over-day moves as suspected scrape noise.
@@ -469,6 +511,7 @@ def audit(digest: dict, history: List[dict], html: Optional[str] = None,
     check_dead_routes(history, digest, run_date, report)
     check_window_is_exhaustive(digest, report)
     check_coverage(digest, report)
+    check_date_coverage(digest, report)
     check_price_swings(history, digest, run_date, report)
     return report
 
@@ -489,4 +532,5 @@ def summarise_checks() -> Dict[str, str]:
         "D4": "departure window scanned exhaustively, not sampled",
         "D5": "implausible overnight moves surfaced as noise",
         "D6": "most routes empty at once means a provider outage",
+        "D7": "no route priced from a fraction of the scanned window",
     }

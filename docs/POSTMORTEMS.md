@@ -167,6 +167,44 @@ alerts on 12 Aug drop, and 13 Aug goes from one stale alert to none.
 **Guarded by** — four regression tests reconstructing the Makassar series, and
 the replay harness, which now shows the difference on recorded data.
 
+### 12. A partial scrape was published as if it were a full scan
+**Symptom** — the 17 Aug digest reported KL→Ambon at MYR 1,787 (794 the day
+before) and KL→Banjarmasin at 878 (429 the day before). Six routes were
+inflated, +22% to +125%.
+**Cause** — the provider returned prices for only a handful of the 30 scanned
+departure dates on those routes: Ambon 1, Labuan Bajo 1, Kendari 1, Balikpapan
+2, Banjarmasin 3, Sorong 4. The digest published the minimum of those samples
+as the route's cheapest fare, in the same column and styling as routes with
+full coverage, under a footnote asserting the figures were "cheapest across the
+30 departure dates scanned". **Every distorted route moved upward** — the dates
+that go missing are disproportionately the cheap ones, so a thin scan always
+reads high.
+**Why nothing caught it** — `D4` asks how many dates were *scanned* (a correct
+30). Nothing asked how many came *back*. Coverage was invisible end to end: not
+in the digest, not in the payload, not in the history.
+**Fix** — `min_date_coverage` (0.25). Below that share a route cannot alert, is
+labelled "partial scan · only N of 30 dates returned" in the table, and is not
+written to history at all — recording an inflated daily-cheapest raises the
+median and makes an ordinary fare tomorrow look like a deal.
+**Guarded by** — `D7`, plus four tests reconstructing the Ambon case. Replaying
+recorded history, `D7` fires on exactly those six routes on 17 Aug and on
+KL→Bandung (6/30) on 14 Aug, and on nothing else.
+
+### 13. The replay harness silently read no per-date history
+**Symptom** — found while building `D7`: every route in every replayed day
+reported 1 of 30 dates.
+**Cause** — `date_prices.json` nests its contents under a `series` key. The
+replay loaded the file raw, so it iterated `{"series", "schema_version"}`,
+matched nothing, and got an empty mapping — indistinguishable from "no per-date
+history recorded yet". The same wrong shape was being handed to `find_deals`,
+so the same-date annotation never fired in a replay either.
+**Fix** — the replay uses `load_date_series()`, the service's own loader, and
+prints how many series it loaded so an empty read is visible rather than
+assumed.
+**The general lesson** — a loader that returns empty on malformed input is
+convenient in production and dangerous in a test harness, where "no data" and
+"data I failed to read" produce identical, passing output.
+
 ---
 
 ## Known risks, not yet guarded

@@ -236,6 +236,15 @@ class Config:
     # week-old price change as today's opportunity, and saying so itself:
     # "only 38% of tracked days were this cheap".
     deal_percentile_guard: float = 0.25   # a discount only counts if it is still rare
+
+    # A route is only comparable to itself if the scan actually saw the window.
+    # On 17 Aug the provider returned prices for 1 of 30 dates on KL->Ambon and
+    # the digest reported MYR 1,787 as that route's cheapest fare; the day
+    # before, with 18 dates, it was 794. Six routes were distorted the same way,
+    # by +22% to +125%, and the table presented them exactly like the rows built
+    # on 30 dates. Below this share of the scanned window a row is a sample, not
+    # a minimum, and is labelled as such rather than alerted on.
+    min_date_coverage: float = 0.25
     min_discount: float = 0.12          # floor: never alert on noise
     min_saving: float = 40.0            # floor: cash worth an email
     min_samples: int = 5                # days of route history before flagging
@@ -328,6 +337,7 @@ class Config:
             severe_discount_floor=_get_float("SEVERE_DISCOUNT_FLOOR", 0.25),
             z_percentile_guard=_get_float("Z_PERCENTILE_GUARD", 0.25),
             deal_percentile_guard=_get_float("DEAL_PERCENTILE_GUARD", 0.25),
+            min_date_coverage=_get_float("MIN_DATE_COVERAGE", 0.25),
             min_discount=_get_float("MIN_DISCOUNT", 0.12),
             min_saving=_get_float("MIN_SAVING", 40.0),
             min_date_samples=_get_int("MIN_DATE_SAMPLES", 3),

@@ -231,5 +231,64 @@ class StalePriceLevelTest(unittest.TestCase):
         self.assertEqual(len(deals), 1, "guard must be the only thing blocking")
 
 
+class ThinScrapeTest(unittest.TestCase):
+    """A price found on 1 of 30 dates is not that route's cheapest fare.
+
+    Real incident, 17 Aug: the provider returned prices for a single departure
+    date on KL->Ambon and three on KL->Banjarmasin. The digest published those
+    as the routes' cheapest fares — MYR 1,787 against 794 the day before, and
+    878 against 429 — in the same column as routes scanned across all 30 dates.
+    Every distorted route moved *upward*, because the dates that go missing are
+    disproportionately the cheap ones.
+    """
+
+    route = Route("KUL", "AMQ", "Ambon")
+    today = date(2026, 8, 17)
+    window = [f"2026-09-{d:02d}" for d in range(1, 31)]
+
+    def _run(self, dates, price, **cfgkw):
+        offers = [Offer(origin="KUL", destination="AMQ", departure_date=d,
+                        price=price, currency="MYR", trip_type="one_way")
+                  for d in dates]
+        return find_deals({"KUL-AMQ": offers}, _history("AMQ", [1600] * 8),
+                          [self.route], _cfg(**cfgkw), self.today,
+                          scanned_departures=self.window)
+
+    def test_a_thin_scrape_cannot_produce_an_alert(self):
+        deals, summaries = self._run(self.window[:1], 900.0)
+        self.assertEqual(deals, [], "1 of 30 dates cannot support an alert")
+        self.assertEqual(summaries[0].dates_seen, 1)
+        self.assertEqual(summaries[0].dates_scanned, 30)
+
+    def test_full_coverage_still_alerts(self):
+        deals, summaries = self._run(self.window, 900.0)
+        self.assertEqual(len(deals), 1)
+        self.assertEqual(summaries[0].dates_seen, 30)
+
+    def test_the_row_says_the_scan_was_partial(self):
+        from flightdeals.emailer import build_html
+        from flightdeals.models import RunResult
+        _, summaries = self._run(self.window[:2], 1787.0)
+        html = build_html(RunResult("2026-08-17", "MYR", [], summaries, 2, [],
+                                    scanned_departures=self.window))
+        self.assertIn("partial scan", html)
+        self.assertIn("only 2 of 30 dates returned", html)
+
+    def test_the_auditor_flags_it_independently(self):
+        from qa.checks import audit
+        digest = {
+            "run_date": "2026-08-17", "currency": "MYR", "min_samples": 5,
+            "scanned_departures": self.window, "deals": [],
+            "summaries": [{"route_key": "KUL-AMQ", "city": "Ambon",
+                           "price": 1787.0, "currency": "MYR",
+                           "trip_type": "one_way", "median": None,
+                           "samples": 8, "baseline_trusted": True,
+                           "discount_pct": None, "maps_url": "",
+                           "dates_seen": 1, "dates_scanned": 30}],
+        }
+        report = audit(digest, _history("AMQ", [1600] * 8))
+        self.assertIn("D7", {f.check for f in report.findings})
+
+
 if __name__ == "__main__":
     unittest.main()

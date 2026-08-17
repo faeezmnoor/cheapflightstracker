@@ -85,6 +85,7 @@ def find_deals(
     today: date,
     date_series: Optional[DateSeries] = None,
     last_alerts: Optional[Dict[str, dict]] = None,
+    scanned_departures: Optional[List[str]] = None,
 ) -> tuple[List[Deal], List[RouteSummary]]:
     """Flag unusually cheap fares and build the per-route digest.
 
@@ -96,11 +97,20 @@ def find_deals(
     deals: List[Deal] = []
     summaries: List[RouteSummary] = []
     cutoff = today.isoformat()
+    scanned_count = len(set(scanned_departures or []))
 
     for route in routes:
         offers = sorted(offers_by_route.get(route.key, []),
                         key=lambda o: (o.price, o.departure_date))
         cheapest = offers[0] if offers else None
+
+        # "Cheapest" is only a minimum if the scan actually saw the window. When
+        # the provider returns a handful of dates, the lowest of them is a
+        # sample that happens to be the smallest — reliably an over-estimate,
+        # since the cheap dates are the ones most often missing.
+        dates_seen = len({o.departure_date for o in offers})
+        thin = bool(scanned_count
+                    and dates_seen < scanned_count * config.min_date_coverage)
 
         daily = (build_daily_series(history, route.key,
                                     cheapest.trip_type if cheapest else "one_way",
@@ -128,6 +138,8 @@ def find_deals(
             discount_pct=summary_discount,
             baseline_trusted=trusted,
             maps_url=route.maps_url,
+            dates_seen=dates_seen,
+            dates_scanned=scanned_count,
         ))
 
         # ---------------- alert --------------------------------------- #
@@ -135,6 +147,13 @@ def find_deals(
         # the best discount is what turned per-date noise into daily spam, and
         # it produced alerts for fares worse than the one shown in the digest.
         if not (cheapest and trusted and stats and stats.median):
+            continue
+
+        # A thin scrape cannot produce an alert in either direction. It inflates
+        # today's "cheapest", so it will not usually look like a deal — but the
+        # same gap makes any discount it *does* show unverifiable, and quietly
+        # records an over-estimate into the baseline that judges tomorrow.
+        if thin:
             continue
 
         z = stats.z_score(cheapest.price)

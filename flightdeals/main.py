@@ -168,7 +168,8 @@ def report(config: Config, today: date,
     series = load_date_series(config.date_history_path)
     alerts = load_alert_state(config.alert_state_path)
     deals, summaries = find_deals(
-        offers_by_route, history, config.routes, config, today, series, alerts
+        offers_by_route, history, config.routes, config, today, series, alerts,
+        scanned_departures=scanned,
     )
     drops = sum(1 for d in deals if d.is_price_drop)
     print(f"[report] flagged {len(deals)} deal(s): "
@@ -206,8 +207,20 @@ def report(config: Config, today: date,
 
     # Route-level history: one row per route/trip-type, for the "usual
     # cheapest" baseline and the digest.
-    history = append_observations(history, daily_cheapest(per_date),
-                                  today.isoformat())
+    #
+    # Routes whose scan came back thin are left out. Their "cheapest" is the
+    # minimum of a handful of dates, which systematically over-estimates — on
+    # 17 Aug KL->Ambon recorded 1,787 off a single date against 794 the day
+    # before. Writing that into history does lasting damage: it raises the
+    # median, and a normal fare tomorrow then reads as a deal.
+    thin = {s.route_key for s in summaries
+            if s.dates_scanned and s.dates_seen
+            < s.dates_scanned * config.min_date_coverage}
+    keep = [o for o in daily_cheapest(per_date) if o.route_key not in thin]
+    if thin:
+        print(f"[report] {len(thin)} route(s) had too few departure dates to "
+              f"record: {', '.join(sorted(thin))}")
+    history = append_observations(history, keep, today.isoformat())
     history = prune_history(history, config.history_window_days + 30, today)
     save_history(config.history_path, history)
 

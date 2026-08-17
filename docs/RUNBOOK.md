@@ -62,7 +62,8 @@ python scripts/check_liveness.py
 ```
 
 Exits non-zero if the history has stopped advancing. The watchdog runs this
-daily at 04:00 UTC and opens an issue labelled `liveness` when it fails.
+daily at 06:00 UTC — well clear of the digest's 2-3 hour scheduling delay — and
+opens an issue labelled `liveness` when it fails.
 
 ---
 

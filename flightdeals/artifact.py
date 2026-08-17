@@ -67,6 +67,10 @@ def digest_payload(result: RunResult, config: Optional[Config] = None) -> dict:
                 "baseline_trusted": s.baseline_trusted,
                 "discount_pct": s.discount_pct,
                 "maps_url": s.maps_url,
+                # How much of the window this route actually returned, so the
+                # auditor can tell a minimum from the smallest of three samples.
+                "dates_seen": s.dates_seen,
+                "dates_scanned": s.dates_scanned,
             }
             for s in result.summaries
         ],
