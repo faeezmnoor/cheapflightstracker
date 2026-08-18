@@ -1,0 +1,59 @@
+name: Send a preview digest
+
+# Emails a digest rebuilt from recorded history, without scanning and without
+# writing anything. For checking a template change in a real inbox.
+#
+# A normal run would do three things a preview must not: burn ~780 live
+# searches against a provider already throttling us, append a second set of
+# observations for a day that already has one, and update the alert state so
+# tomorrow's genuine alert is suppressed as a repeat.
+#
+# Manual only, and the subject is prefixed [PREVIEW] — two emails that look
+# alike but disagree is a confusion this project has already caused once.
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Recorded day to rebuild (blank = most recent)"
+        type: string
+        required: false
+      print_only:
+        description: "Print to the log instead of sending"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read          # deliberately not write: this must not commit
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+
+      - name: Build and send the preview
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_APP_PASSWORD: ${{ secrets.SMTP_APP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO || secrets.SMTP_USER }}
+          EMAIL_FROM: ${{ secrets.SMTP_USER }}
+          CURRENCY: ${{ vars.CURRENCY || 'MYR' }}
+          ROUTES: ${{ vars.ROUTES }}
+        run: >
+          python scripts/send_preview.py
+          ${{ inputs.date && format('--date {0}', inputs.date) || '' }}
+          ${{ inputs.print_only == true && '--print' || '' }}
+
+      - name: Confirm nothing was written
+        run: |
+          if [ -n "$(git status --porcelain data/)" ]; then
+            echo "::error::preview modified data/ — it must not"
+            git status --porcelain data/
+            exit 1
+          fi
+          echo "data/ untouched, as intended"
