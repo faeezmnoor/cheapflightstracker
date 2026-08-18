@@ -290,5 +290,53 @@ class ThinScrapeTest(unittest.TestCase):
         self.assertIn("D7", {f.check for f in report.findings})
 
 
+class RunCoverageTest(unittest.TestCase):
+    """Coverage slid 86% -> 68% -> 67% over three days with zero errors logged.
+
+    A throttled request returns HTTP 200 and an empty itinerary list, which is
+    indistinguishable from "no flights on this date", so the run log said
+    "0 error(s)" every time. Nothing in the digest, the payload or the history
+    recorded that a third of the window had gone missing.
+    """
+
+    window = [f"2026-09-{d:02d}" for d in range(1, 31)]
+
+    def _digest(self, seen_per_route):
+        return {
+            "run_date": "2026-08-18", "currency": "MYR", "min_samples": 5,
+            "scanned_departures": self.window, "deals": [],
+            "summaries": [
+                {"route_key": f"KUL-R{i:02d}", "city": f"City{i}",
+                 "price": 300.0, "currency": "MYR", "trip_type": "one_way",
+                 "median": None, "samples": 8, "baseline_trusted": True,
+                 "discount_pct": None, "maps_url": "",
+                 "dates_seen": seen, "dates_scanned": 30}
+                for i, seen in enumerate(seen_per_route)],
+        }
+
+    def test_a_healthy_run_passes(self):
+        from qa.checks import audit
+        report = audit(self._digest([27] * 12), [])
+        self.assertNotIn("D8", {f.check for f in report.findings})
+
+    def test_a_degraded_run_is_flagged(self):
+        from qa.checks import audit
+        # 67%: the 18 Aug shape.
+        report = audit(self._digest([20] * 12), [])
+        self.assertIn("D8", {f.check for f in report.findings})
+
+    def test_the_header_states_coverage(self):
+        from flightdeals.emailer import build_html
+        from flightdeals.models import Baseline, Offer, RouteSummary, RunResult
+        offer = Offer("KUL", "CGK", "2026-09-01", 329.0, "MYR", "one_way")
+        summaries = [RouteSummary("KUL-CGK", "Jakarta", offer,
+                                  Baseline("KUL-CGK", 8, median=332.0), None,
+                                  baseline_trusted=True, dates_seen=2,
+                                  dates_scanned=30)]
+        html = build_html(RunResult("2026-08-18", "MYR", [], summaries, 1793,
+                                    [], scanned_departures=self.window))
+        self.assertIn("7% of scanned departure dates returned a price", html)
+
+
 if __name__ == "__main__":
     unittest.main()

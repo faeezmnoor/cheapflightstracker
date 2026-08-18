@@ -244,7 +244,16 @@ class Config:
     # by +22% to +125%, and the table presented them exactly like the rows built
     # on 30 dates. Below this share of the scanned window a row is a sample, not
     # a minimum, and is labelled as such rather than alerted on.
-    min_date_coverage: float = 0.25
+    # Raised from 0.25 after 18 Aug: Denpasar and Lombok returned 8 of 30
+    # dates, cleared the old bar, and were published unlabelled beside routes
+    # with full coverage. The cheapest of less than half a window is not that
+    # window's minimum. On a healthy day (16 Aug) this labels 1 route of 26; on
+    # the degraded days it labels 6-8, which is the point.
+    min_date_coverage: float = 0.50
+
+    # How many empty searches a shard may re-ask before giving up. Zero
+    # disables the retry entirely.
+    empty_retry_budget: int = 60
     min_discount: float = 0.12          # floor: never alert on noise
     min_saving: float = 40.0            # floor: cash worth an email
     min_samples: int = 5                # days of route history before flagging
@@ -338,6 +347,7 @@ class Config:
             z_percentile_guard=_get_float("Z_PERCENTILE_GUARD", 0.25),
             deal_percentile_guard=_get_float("DEAL_PERCENTILE_GUARD", 0.25),
             min_date_coverage=_get_float("MIN_DATE_COVERAGE", 0.25),
+            empty_retry_budget=_get_int("EMPTY_RETRY_BUDGET", 60),
             min_discount=_get_float("MIN_DISCOUNT", 0.12),
             min_saving=_get_float("MIN_SAVING", 40.0),
             min_date_samples=_get_int("MIN_DATE_SAMPLES", 3),

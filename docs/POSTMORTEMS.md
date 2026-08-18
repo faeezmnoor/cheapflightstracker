@@ -205,6 +205,45 @@ assumed.
 convenient in production and dangerous in a test harness, where "no data" and
 "data I failed to read" produce identical, passing output.
 
+### 14. Coverage slid by a third and every run reported success
+**Symptom** — "fares checked" fell 3,191 → 2,487 → 1,793 across 16-18 Aug. On
+18 Aug the flagship route, KL→Jakarta, was priced from **2 of 30** departure
+dates; Medan from 2, Padang from 3, Pekanbaru from 6, Surabaya from 7.
+**Cause** — the provider answers a throttled request with **HTTP 200 and an
+empty itinerary list**, which is byte-for-byte identical to "no flights on this
+date". Shard 0's log for 18 Aug reads `collected 377 offers, 0 error(s)` while
+90 of its 210 searches returned nothing at all. Every shard degraded together
+(77-91% → 57-78%), so it is not one throttled runner.
+**What this cost** — nothing crashed, no error was logged, no check fired, and
+the digest read normally while a third of the window was missing.
+**Fix** —
+* `min_date_coverage` raised 0.25 → 0.50. Denpasar and Lombok at 8 of 30 had
+  cleared the old bar and were published unlabelled next to fully scanned
+  routes. The cheapest of less than half a window is not that window's minimum.
+* The digest header now states coverage outright — *"67% of scanned departure
+  dates returned a price"* — in red below 75%. A slow slide is the dangerous
+  shape, and the person reading the email is the one guaranteed to be looking.
+* An empty search is re-asked once after a longer pause, budgeted at 60 per
+  shard so a badly throttled run cannot triple its own request volume. **Whether
+  this helps is unknown**; the run logs how many retries recovered a price, so
+  the next few days answer the question with evidence instead of assumption.
+**Guarded by** — `D8` (run-level coverage against a 75% floor) alongside `D7`
+(per-route). Replaying recorded history, `D8` fires on 17 and 18 Aug and on no
+other day.
+
+### 15. A log line that reported the opposite of what happened
+**Symptom** — found immediately, in the test output of the fix above: `retried
+60 empty search(es)` printed on runs using the offline mock provider, which
+never retries anything.
+**Cause** — the count was inferred as `budget - remaining`. Offline providers
+start at a budget of zero, so the subtraction reported the full configured
+budget as "used".
+**Fix** — count what was actually re-asked.
+**Why it is worth an entry** — a log line stating the opposite of what happened
+is worse than no log line. The next person diagnosing a coverage problem would
+have read "retried 60, recovered 0", concluded the retry was useless, and
+removed it — on evidence that was pure arithmetic error.
+
 ---
 
 ## Known risks, not yet guarded

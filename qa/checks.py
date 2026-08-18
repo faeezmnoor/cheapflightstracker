@@ -52,7 +52,10 @@ MAX_EMPTY_ROUTE_RATE = 0.5
 # Below this share of the scanned window, a route's cheapest fare is the
 # minimum of a sample rather than of the window. Mirrors MIN_DATE_COVERAGE
 # in the service, restated here so the auditor keeps its own threshold.
-MIN_DATE_COVERAGE = 0.25
+MIN_DATE_COVERAGE = 0.50
+
+# Run-level coverage. Healthy days sit at 80-88%; the degraded ones at 67-68%.
+RUN_COVERAGE_FLOOR = 0.75
 
 
 def _close(a: Optional[float], b: Optional[float]) -> bool:
@@ -455,6 +458,39 @@ def check_date_coverage(digest: dict, report: AuditReport) -> None:
             evidence=f"{len(thin)}: {'; '.join(sorted(thin)[:8])}"))
 
 
+def check_run_coverage(digest: dict, report: AuditReport) -> None:
+    """D8 — how much of the whole window came back, across every route.
+
+    `D7` names individual thin routes. This asks the run-level question, which
+    is the one that moves: coverage was 86% on 16 Aug, 68% on 17 Aug and 67% on
+    18 Aug, with **zero errors logged on any of them**. The provider answers a
+    throttled request with HTTP 200 and an empty itinerary list, so a
+    third of the window can disappear without anything failing.
+
+    A slow slide is the dangerous shape here — no single day looks broken, and
+    by the time prices are visibly wrong the baselines have already absorbed
+    weeks of inflated readings.
+    """
+    report.ran("D8")
+    priced = [s for s in digest.get("summaries", [])
+              if s.get("price") is not None and s.get("dates_scanned")]
+    if len(priced) < MIN_ROUTES_FOR_RATE:
+        return
+    seen = sum(int(s.get("dates_seen") or 0) for s in priced)
+    possible = sum(int(s.get("dates_scanned") or 0) for s in priced)
+    if not possible:
+        return
+    share = seen / possible
+    if share < RUN_COVERAGE_FLOOR:
+        report.add(Finding(
+            "D8", WARN,
+            "much of the scanned window returned no price at all — the "
+            "provider answers a throttled request with an empty result, not "
+            "an error, so this will not appear in the run log",
+            evidence=(f"{seen}/{possible} route-dates = {share:.0%} "
+                      f"(floor {RUN_COVERAGE_FLOOR:.0%})")))
+
+
 def check_price_swings(history: List[dict], digest: dict, run_date: str,
                        report: AuditReport) -> None:
     """D5 — flag implausible day-over-day moves as suspected scrape noise.
@@ -512,6 +548,7 @@ def audit(digest: dict, history: List[dict], html: Optional[str] = None,
     check_window_is_exhaustive(digest, report)
     check_coverage(digest, report)
     check_date_coverage(digest, report)
+    check_run_coverage(digest, report)
     check_price_swings(history, digest, run_date, report)
     return report
 
@@ -533,4 +570,5 @@ def summarise_checks() -> Dict[str, str]:
         "D5": "implausible overnight moves surfaced as noise",
         "D6": "most routes empty at once means a provider outage",
         "D7": "no route priced from a fraction of the scanned window",
+        "D8": "the run as a whole saw most of the window",
     }

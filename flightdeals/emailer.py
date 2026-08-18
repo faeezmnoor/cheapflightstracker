@@ -299,6 +299,29 @@ def _summary_row(s: RouteSummary, currency: str) -> str:
     )
 
 
+def _coverage_note(result: RunResult) -> str:
+    """How much of the scanned window actually came back, in the header.
+
+    The provider answers a throttled request with HTTP 200 and no itineraries,
+    which is indistinguishable from "no flights that day". Coverage fell from
+    86% to 67% over 17-18 Aug with zero errors logged, and nothing in the email
+    said so — the digest looked entirely normal while a third of the window had
+    gone missing. Printing it makes a slow degradation visible to whoever reads
+    the email, which is the only person guaranteed to be looking.
+    """
+    priced = [s for s in result.summaries if s.cheapest and s.dates_scanned]
+    if not priced:
+        return ""
+    seen = sum(s.dates_seen for s in priced)
+    possible = sum(s.dates_scanned for s in priced)
+    if not possible:
+        return ""
+    share = seen / possible
+    colour = "#c0392b" if share < 0.75 else "#888"
+    return (f'<br><span style="color:{colour};">{share:.0%} of scanned '
+            f'departure dates returned a price</span>')
+
+
 def _qa_banner(result: RunResult) -> str:
     """Say plainly when QA withheld something.
 
@@ -353,7 +376,8 @@ def build_html(result: RunResult) -> str:
         &#9992;&#65039; KL &rarr; Indonesia flight deals</div>
       <div style="font-size:13px;color:#888;margin-top:4px;">
         {escape(result.run_date)} &middot; {len(result.deals)} deal(s) &middot;
-        {result.offers_checked} fares checked &middot; {escape(result.currency)}</div>
+        {result.offers_checked} fares checked &middot; {escape(result.currency)}
+        {_coverage_note(result)}</div>
     </td></tr>
 
     {_qa_banner(result)}

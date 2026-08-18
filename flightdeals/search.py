@@ -55,10 +55,38 @@ def run_searches(
     offers_by_route: Dict[str, List[Offer]] = {r.key: [] for r in config.routes}
     errors: List[str] = []
 
+    offline = getattr(provider, "offline", False)
+    # A throttled request comes back HTTP 200 with no itineraries, which is
+    # byte-for-byte what "no flights that day" looks like. On 18 Aug 90 of
+    # shard 0's 210 searches returned nothing and the log said "0 error(s)" —
+    # coverage had fallen to 67% with no signal anywhere. One retry after a
+    # longer pause distinguishes the two: a genuinely empty date stays empty,
+    # a throttled one often answers on the second ask.
+    #
+    # Budgeted, because retrying every empty result on a badly throttled run
+    # would add a third again as many requests and make the throttling worse.
+    # The recovery count is logged so the next run tells us whether this is
+    # worth keeping, rather than leaving it to be assumed either way.
+    retry_budget = 0 if offline else config.empty_retry_budget
+    retried = 0
+    recovered = 0
+
+    def _search(dep: str, ret: Optional[str]) -> List[Offer]:
+        return provider.search(route.origin, route.destination, dep, ret)
+
     for route in config.routes:
         for dep, ret in date_pairs:
             try:
-                found = provider.search(route.origin, route.destination, dep, ret)
+                found = _search(dep, ret)
+                if not found and retry_budget > 0:
+                    retry_budget -= 1
+                    retried += 1
+                    base = config.request_pause_seconds
+                    if base > 0:
+                        time.sleep(base * 3 + random.uniform(0, base))
+                    found = _search(dep, ret)
+                    if found:
+                        recovered += 1
                 offers_by_route[route.key].extend(found)
             except ProviderError as exc:
                 errors.append(f"{route.key} {dep}->{ret or 'oneway'}: {exc}")
@@ -72,5 +100,13 @@ def run_searches(
                     and config.request_pause_seconds > 0:
                 base = config.request_pause_seconds
                 time.sleep(base + random.uniform(0, base * 0.6))
+
+    # Count what was actually re-asked. Inferring it from the remaining budget
+    # reported "retried 60" for offline providers, whose budget starts at zero
+    # and never moves — a log line stating the opposite of what happened, which
+    # is precisely the sort of thing that misleads the next diagnosis.
+    if retried:
+        print(f"[scan] retried {retried} empty search(es), {recovered} returned "
+              f"a price on the second ask")
 
     return offers_by_route, errors
