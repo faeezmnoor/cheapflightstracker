@@ -52,9 +52,17 @@ daily-cheapest fares:
 | **Is it anomalous?** | modified z-score (MAD-based) | Comparable across routes: −3 means the same on a 200 fare and a 2,000 one. |
 | **Is it a new low?** | cheaper than anything on record | Strongest signal, and naturally noise-resistant — artifacts push prices *up*, so they cannot fake a low. |
 
-A fare qualifies on **any** of those, or on a plain large discount, always
-behind two floors: **≥12% off and ≥MYR 40 saved**. Without them a route sitting
-at one fare all week scores z = −4.75 on a dip most travellers would shrug at.
+A fare qualifies on a new low, on landing in the rare tail, or on a large
+discount **that is also still rare** — always behind two floors: **≥12% off and
+≥MYR 40 saved**. Without those a route sitting at one fare all week scores
+z = −4.75 on a dip most travellers would shrug at.
+
+The rarity requirement on the discount path is not decoration. A fare that
+steps down to a new level and holds there keeps scoring the same discount until
+the median catches up days later: one route sat at exactly the same price for
+four days while its headline stayed "23% off" and its percentile climbed 0% →
+17% → 29% → 38%. By day four the email was announcing a week-old price change
+as today's opportunity.
 
 **Severe** requires *rare **and** large* — ≥35% off, or ≥25% off while also
 being a new low or in the rare tail. A big z-score alone is never enough.
@@ -89,13 +97,21 @@ The [`qa/`](qa/) package re-derives the numbers from raw price history with a
 the email claims. It deliberately does not import `flightdeals` — two
 derivations that agree is evidence; one implementation checking itself is not.
 
-Twelve checks, each traceable to a real incident in
+Fifteen checks, each traceable to a real incident in
 [`docs/POSTMORTEMS.md`](docs/POSTMORTEMS.md):
 
 | | Checks |
 |---|---|
 | **Digest** | alert never quotes a worse price than the table · alert rate stays plausible · no alert on a thin baseline · the numbers agree with each other · claimed baselines reproduce from history · one run, one currency · what rendered matches what was computed |
-| **Data** | history reaches yesterday · no missing days · no route silently returning nothing · window scanned exhaustively · most-routes-empty means an outage, not a quiet market |
+| **Data** | history reaches yesterday · no missing days · no route silently returning nothing · window scanned exhaustively · most-routes-empty means an outage, not a quiet market · no route priced from a fraction of the window · the run as a whole saw most of the window |
+
+The last two matter more than they sound. The data source answers a throttled
+request with **HTTP 200 and an empty itinerary list**, which is byte-for-byte
+what "no flights on this date" looks like — so coverage can fall by a third
+with every run reporting success and no error logged anywhere. A route priced
+off 2 of 30 dates always reads *high*, because the dates that go missing are
+disproportionately the cheap ones. Those rows are labelled in the digest, never
+alerted on, and never written to history.
 
 It runs **before the email is sent**. A blocking finding withholds the alerts
 and says so in a banner, keeping the cheapest-today table — because a silently
@@ -124,6 +140,7 @@ actually happened fails in CI rather than in an inbox.
         ├─ search.py       every route x every date in the window
         ├─ baseline.py     route "usual price" + per-departure-date series
         ├─ detector.py     confirmed price drops, then merely cheap dates
+        ├─ qa/checks.py    audit the digest BEFORE it is sent; withhold on doubt
         ├─ emailer.py      build + send the HTML/text digest via Gmail SMTP
         └─ baseline.py     append today's fares, commit history back to the repo
 ```
@@ -137,7 +154,11 @@ actually happened fails in CI rather than in an inbox.
 | `flightdeals/detector.py` | Deal / severe-deal classification |
 | `flightdeals/emailer.py`  | Email composition + SMTP send |
 | `flightdeals/main.py`     | Orchestration + CLI |
+| `flightdeals/artifact.py` | Serialise the digest for the auditor + CI evidence |
+| `qa/` | The independent auditor — re-derives every claim, imports nothing from `flightdeals` |
 | `.github/workflows/daily-flight-alerts.yml` | The daily schedule |
+| `.github/workflows/ci.yml` | Tests + replay audit on every push |
+| `.github/workflows/liveness.yml` | Did the job run at all? |
 
 ---
 
