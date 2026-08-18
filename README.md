@@ -1,25 +1,62 @@
 # ✈️ Cheap Flights Tracker
 
-**Finds genuinely underpriced flights — not just below-average ones.**
+**Finds genuinely underpriced flights out of Kuala Lumpur — not just cheap ones.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![No API key](https://img.shields.io/badge/API%20key-not%20required-brightgreen)
 
-Every morning it scans **26 Indonesian airports** from **Kuala Lumpur (KUL)**
-across **every departure date in the next 30 days**, compares each fare against
-that route's own price history using robust statistics, and emails you only the
-ones that are genuinely unusual — not merely below average.
+Every morning it prices **26 Indonesian airports** from **KL**, across **every
+departure date in the next 30 days**, and emails you the fares that are unusual
+*for that route* — not the ones that happen to be low.
 
-It runs on **GitHub Actions** (free), reads live fares from **Google Flights**
-(via [`fast-flights`](https://github.com/AWeirdDev/flights) — **no API key**),
-and sends the digest over **SMTP**. Nothing to host, nothing to pay for.
+It runs on GitHub Actions, reads live fares from Google Flights with **no API key**,
+and sends the digest over SMTP. Nothing to host, nothing to pay for.
 
 ---
 
-## What you get
+## The problem
 
-Every morning (09:00 Malaysia time) an email like this:
+"Cheap" is not a useful signal. KL→Medan at MYR 150 is ordinary; KL→Jakarta at
+MYR 150 is a genuinely good deal. A single price threshold either floods you with
+short-haul noise or hides every real bargain on the longer routes.
+
+So the only question worth asking is whether a fare is cheap **relative to that
+route's own history** — which means every route needs its own baseline, and the
+baseline has to survive bad data.
+
+## How it decides
+
+Airfare distributions are **right-skewed**: a hard floor at the carrier's base
+fare, a long tail of flexible and multi-stop fares, and the occasional scrape that
+misses the cheap itineraries and records several times the norm. Mean and standard
+deviation are the wrong tools for that shape — one reading at 9,475 inflates the
+scale enough to hide every genuine dip afterwards.
+
+So it uses **median and MAD** (median absolute deviation), which an outlier cannot
+move, and asks three questions of the route's own history of daily-cheapest fares:
+
+| Question | Measure | Why it matters |
+|---|---|---|
+| **Is it rare?** | percentile rank — *"only 20% of tracked days were this cheap"* | No distributional assumptions. The honest measure of unusual. |
+| **Is it anomalous?** | modified z-score (MAD-based) | Comparable across routes: −3 means the same on a MYR 200 fare and a MYR 2,000 one. |
+| **Is it a new low?** | cheaper than anything on record | Strongest signal, and naturally noise-resistant — bad scrapes push prices *up*, so they cannot fake a low. |
+
+A fare qualifies on **any** of those, behind two floors: **≥12% off and ≥MYR 40
+saved**. Without them, a route sitting at one price all week scores z = −4.75 on a
+dip most travellers would shrug at. **Severe** requires *rare **and** large* — a
+big z-score alone is never enough.
+
+## Not saying the same thing twice
+
+Statistics decide whether a fare is *unusual*. They cannot decide whether it is
+*news*. A fare that stays cheap stays unusual, and would otherwise be re-sent every
+morning until the median caught up with it.
+
+So each alert is recorded, and a route is only mentioned again once the fare drops
+a further 5% or a week has passed.
+
+## What you get
 
 > **✈️ 🔥 3 underpriced KL→Indonesia flights (1 severe) — best: KL→Medan 50% off**
 >
@@ -27,137 +64,10 @@ Every morning (09:00 Malaysia time) an email like this:
 >   <br><sub>cheapest in 31 days of tracking · only 2% of tracked days were this
 >   cheap · 4.1 robust deviations below usual</sub>
 > - **KL → Jakarta** — **MYR 247** · 30% off · save MYR 107 *(1 stop)*
-> - …plus a **cheapest-today table** for all 26 routes.
->
-> Every city carries a 📍 map link — an IATA code tells you nothing about
-> whether a place is a beach or the middle of Kalimantan. The links use
-> Google's Maps URLs API, so they open the Maps app on a phone and the
-> browser on a desktop.
+> - …plus a cheapest-today table for all 26 routes.
 
-### How "underpriced" is decided
-
-Airfare distributions are **right-skewed**: a hard floor at the carrier's base
-fare, a long tail of flexible and multi-stop fares, and the occasional scrape
-that misses the cheap itineraries entirely and records several times the norm.
-Mean and standard deviation are the wrong tools for that shape — a single
-9,475 reading inflates the scale enough to hide every genuine dip afterwards.
-
-So the service uses **median and MAD** (median absolute deviation), which an
-outlier cannot move, and asks three questions of the route's own history of
-daily-cheapest fares:
-
-| Question | Measure | Why it matters |
-|---|---|---|
-| **Is it rare?** | percentile rank — *"only 20% of tracked days were this cheap"* | No distributional assumptions. The honest measure of unusual. |
-| **Is it anomalous?** | modified z-score (MAD-based) | Comparable across routes: −3 means the same on a 200 fare and a 2,000 one. |
-| **Is it a new low?** | cheaper than anything on record | Strongest signal, and naturally noise-resistant — artifacts push prices *up*, so they cannot fake a low. |
-
-A fare qualifies on a new low, on landing in the rare tail, or on a large
-discount **that is also still rare** — always behind two floors: **≥12% off and
-≥MYR 40 saved**. Without those a route sitting at one fare all week scores
-z = −4.75 on a dip most travellers would shrug at.
-
-The rarity requirement on the discount path is not decoration. A fare that
-steps down to a new level and holds there keeps scoring the same discount until
-the median catches up days later: one route sat at exactly the same price for
-four days while its headline stayed "23% off" and its percentile climbed 0% →
-17% → 29% → 38%. By day four the email was announcing a week-old price change
-as today's opportunity.
-
-**Severe** requires *rare **and** large* — ≥35% off, or ≥25% off while also
-being a new low or in the rare tail. A big z-score alone is never enough.
-
-Only the route's **own cheapest fare** is ever a candidate, so an alert can
-never quote a worse price than the table beneath it.
-
-### Not saying the same thing twice
-
-Statistics decide whether a fare is *unusual*; they cannot decide whether it is
-*news*. A fare that stays cheap stays unusual, and would be re-sent every
-morning until the median caught up with it. `data/alert_state.json` records
-what was sent, and a route is only mentioned again once the fare drops a
-further `REPEAT_IMPROVEMENT` (5%) or `REPEAT_COOLDOWN_DAYS` (7) have passed.
-
-Every departure date's price is also tracked in
-[`data/date_prices.json`](data/date_prices.json), used to annotate an alert
-with what that same date previously cost. It is annotation only: roughly 7% of
-dates swing more than 2× day to day from scrape noise, which is far too
-unreliable to originate an alert.
-
----
-
-## How it checks itself
-
-Every defect this project has shipped produced a *plausible* email — arriving on
-time, rendering correctly, and wrong. None of them crashed, and the test suite
-was green for all of them. So "it ran" is not treated as evidence of anything.
-
-The [`qa/`](qa/) package re-derives the numbers from raw price history with a
-**second, independently written implementation** and compares them against what
-the email claims. It deliberately does not import `flightdeals` — two
-derivations that agree is evidence; one implementation checking itself is not.
-
-Fifteen checks, each traceable to a real incident in
-[`docs/POSTMORTEMS.md`](docs/POSTMORTEMS.md):
-
-| | Checks |
-|---|---|
-| **Digest** | alert never quotes a worse price than the table · alert rate stays plausible · no alert on a thin baseline · the numbers agree with each other · claimed baselines reproduce from history · one run, one currency · what rendered matches what was computed |
-| **Data** | history reaches yesterday · no missing days · no route silently returning nothing · window scanned exhaustively · most-routes-empty means an outage, not a quiet market · no route priced from a fraction of the window · the run as a whole saw most of the window |
-
-The last two matter more than they sound. The data source answers a throttled
-request with **HTTP 200 and an empty itinerary list**, which is byte-for-byte
-what "no flights on this date" looks like — so coverage can fall by a third
-with every run reporting success and no error logged anywhere. A route priced
-off 2 of 30 dates always reads *high*, because the dates that go missing are
-disproportionately the cheap ones. Those rows are labelled in the digest, never
-alerted on, and never written to history.
-
-It runs **before the email is sent**. A blocking finding withholds the alerts
-and says so in a banner, keeping the cheapest-today table — because a silently
-shorter email is indistinguishable from a quiet morning, which is how several
-incidents ran unnoticed for days.
-
-```bash
-python scripts/replay_audit.py --all     # replay every recorded day past the auditor
-python scripts/check_liveness.py         # did the job run at all?
-```
-
----
-
-## Looking further out than 30 days
-
-The daily scan covers the next 30 days exhaustively — but that is the *wrong
-end* of the booking curve. Measured on this project's own recorded prices,
-normalised per route:
-
-| Days before departure | 1–5 | 6–10 | 11–15 | 16–20 | 21–25 | 26–30 |
-|---|---|---|---|---|---|---|
-| Relative price | **1.077** | 1.014 | 1.040 | 1.000 | **0.937** | 0.972 |
-
-Fares 3–4 weeks out run ~10% below fares booked inside a week, and the curve
-has not bottomed by day 30. Southeast Asia is repeatedly measured to bottom at
-3–6 months, and AirAsia's sale campaigns sell travel 6–12 months ahead — none
-of which a 30-day window can see.
-
-So there is a second, slower lane: `scripts/horizon_scan.py` samples 45–180
-days out, weekly, into its own store. Its results appear in the digest under
-*"Cheaper if you can wait"* — never merged into the alerts, and never called
-"cheapest", because it samples rather than covers. Pooling a 150-day fare with
-a 20-day one would repeat the same error as pooling one-way with round-trip.
-
-[`docs/COMPETITOR-ANALYSIS.md`](docs/COMPETITOR-ANALYSIS.md) surveys how the
-rest of the industry finds cheap fares — Skiplagged, Kiwi, Going, Secret
-Flying, Google Flights — and records a verdict on each. Several widely repeated
-techniques were **rejected on measurements of this project's own data**: the
-day-of-week effect is 1.8% here, and point-of-sale arbitrage does nothing
-against carriers that price flat.
-
-`replay_audit.py` is the real pre-merge gate: it re-runs past days against real
-recorded history, so a change that would have sent a wrong email on a day that
-actually happened fails in CI rather than in an inbox.
-
----
+Every city carries a 📍 map link, because an IATA code tells you nothing about
+whether a place is a beach or the middle of Kalimantan.
 
 ## How it works
 
@@ -167,90 +77,48 @@ actually happened fails in CI rather than in an inbox.
         ▼
    run.py ──► flightdeals.main.run()
         │
-        ├─ search.py       every route x every date in the window
+        ├─ search.py       every route × every date in the window
         ├─ baseline.py     route "usual price" + per-departure-date series
         ├─ detector.py     confirmed price drops, then merely cheap dates
-        ├─ qa/checks.py    audit the digest BEFORE it is sent; withhold on doubt
-        ├─ emailer.py      build + send the HTML/text digest via Gmail SMTP
+        ├─ emailer.py      build + send the HTML/text digest via SMTP
         └─ baseline.py     append today's fares, commit history back to the repo
 ```
 
-| File | Responsibility |
-|------|----------------|
-| `flightdeals/config.py`   | All settings, read from env vars |
-| `flightdeals/providers/`  | Pluggable data sources — `googleflights` (live) and `mock` (offline demo/tests) |
-| `flightdeals/search.py`   | Which routes × dates to probe |
-| `flightdeals/baseline.py` | Price-history storage + "usual price" stats |
-| `flightdeals/detector.py` | Deal / severe-deal classification |
-| `flightdeals/emailer.py`  | Email composition + SMTP send |
-| `flightdeals/main.py`     | Orchestration + CLI |
-| `flightdeals/artifact.py` | Serialise the digest for the auditor + CI evidence |
-| `qa/` | The independent auditor — re-derives every claim, imports nothing from `flightdeals` |
-| `.github/workflows/daily-flight-alerts.yml` | The daily schedule |
-| `.github/workflows/ci.yml` | Tests + replay audit on every push |
-| `.github/workflows/liveness.yml` | Did the job run at all? |
+Price history lives in the repo itself, committed by the daily job — no database.
+The data source is pluggable: implement `search()` on `FlightProvider` in
+[`flightdeals/providers/`](flightdeals/providers/) and select it with `PROVIDER=`.
+A `mock` provider ships for offline demos and tests.
 
----
+## Setup (about 5 minutes)
 
-## Setup (about 5 minutes — only email credentials needed)
+Because the data source needs no API key, the only thing to configure is email.
 
-Because the data source needs **no API key**, the only thing to configure is how
-the email is sent.
+1. **Create a Gmail app password** — enable 2-Step Verification, then generate one
+   at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords).
+2. **Add repository secrets** (Settings → Secrets and variables → Actions):
 
-### 1. Create a Gmail app password
-1. Enable 2-Step Verification on your Google account.
-2. Go to **https://myaccount.google.com/apppasswords** and generate a
-   16-character app password (name it e.g. "flight deals").
+   | Secret | Value |
+   |--------|-------|
+   | `SMTP_USER` | the Gmail address the digest is sent *from* |
+   | `SMTP_APP_PASSWORD` | the 16-character app password |
+   | `EMAIL_TO` | where to send it (defaults to `SMTP_USER`) |
 
-### 2. Add the secrets to GitHub
-In this repo: **Settings → Secrets and variables → Actions → New repository secret**
-
-| Secret | Value |
-|--------|-------|
-| `SMTP_USER` | the Gmail address the digest is sent *from* |
-| `SMTP_APP_PASSWORD` | the 16-char Gmail app password (no spaces) |
-| `EMAIL_TO` | where to send the digest (defaults to `SMTP_USER`) |
-
-*(Optional)* tune behaviour without touching code via **Variables** (same page):
-`ROUTES`, `DEPARTURE_OFFSETS`, `ROUND_TRIP`, `STAY_LENGTHS`, `DEAL_THRESHOLD`,
-`SEVERE_THRESHOLD`, `MIN_SAMPLES`, `CURRENCY`.
-
-### 3. Turn it on
-The workflow runs automatically every day. To test it immediately:
-**Actions → "Daily flight deals (KL → Indonesia)" → Run workflow**
-(tick *dry_run* to preview without emailing / without committing history).
-
----
+3. **Turn it on** — the workflow runs daily. To test now: Actions → *Daily flight
+   deals* → Run workflow (tick *dry_run* to preview without sending).
 
 ## Run it locally
 
 ```bash
 pip install -r requirements.txt
 
-# Offline demo — no network needed, prints the email it would send:
-python run.py --provider mock --dry-run
-
-# Real run against Google Flights (prints, doesn't send):
-python run.py --dry-run
-
-# Real run that sends the email (load your .env first):
-cp .env.example .env      # then fill in your Gmail app password
-set -a; source .env; set +a
-python run.py
+python run.py --provider mock --dry-run   # offline demo, prints the email
+python run.py --dry-run                   # real fares, still doesn't send
+python -m unittest discover -s tests      # stdlib only, no network
 ```
 
-Run the tests (they use the mock provider — no network):
+## Pointing it somewhere else
 
-```bash
-python -m unittest discover -s tests -v
-```
-
----
-
-## Using it for other routes
-
-Nothing about the machinery is specific to Indonesia — only the default route
-list is. Point it anywhere by setting two variables:
+Nothing about the machinery is specific to Indonesia — only the default route list.
 
 ```bash
 ORIGIN=SIN                       # any IATA origin
@@ -258,79 +126,20 @@ ROUTES=BKK,HKT,CNX,DMK           # any destinations
 CURRENCY=SGD  REGION=sg          # price it in the market you buy from
 ```
 
-`scripts/probe_destinations.py` will tell you which candidates are actually
-reachable from a given origin before you commit 30 searches a day to each.
+Google prices by market, so `REGION` and `LANGUAGE` make the runner see the fares a
+local shopper sees. Every setting is an env var — see [`.env.example`](.env.example).
 
----
+## Notes
 
-## Tuning
+- **Unofficial data source.** Fares come from Google Flights' public web endpoint
+  via [`fast-flights`](https://github.com/AWeirdDev/flights). There is no free
+  official flight-price API, and this can break if Google changes their page
+  format. Intended for personal, low-volume monitoring — please respect Google's
+  terms and don't point it at a route list large enough to be a nuisance.
+- **Baselines need a few days.** Until a route has 5 days of history it shows
+  "building baseline" and won't flag anything, by design.
+- **Always confirm before booking.** An alert is a prompt to look, not a quote.
 
-Everything is an env var (see [`.env.example`](.env.example)). The most useful:
+## License
 
-- **Which cities** — `ROUTES=CGK,DPS,SUB,...`. The default is all **26 airports
-  confirmed reachable from KL** by `scripts/probe_destinations.py` (8 direct,
-  18 via a connection); airports with no KL service are deliberately excluded.
-- **Which dates** — every date in the next `DEPARTURE_WINDOW_DAYS` (default 30)
-  is scanned, **exhaustively, not sampled**: Google prices each date
-  separately, so a date you don't probe is a price you can't see. Set
-  `DEPARTURE_OFFSETS` to override with an explicit list.
-- **Point of sale** — `REGION=my`, `LANGUAGE=en`. Google prices by market, so
-  these make the runner see the fares a Malaysian shopper sees.
-- **One-way vs round-trip** — round trips are **off** by default (a return
-  prices as two one-ways). `ROUND_TRIP=true` adds them, on their own
-  `ROUND_TRIP_OFFSETS` grid, capped by `MAX_TRIP_DAYS=30`.
-- **Sensitivity** — `DEAL_THRESHOLD=0.20`, `SEVERE_THRESHOLD=0.35`.
-
-### Request volume
-Google Flights has **no quota**, but it's an unofficial data source, so hammering
-it risks being rate-limited/blocked. The defaults make ~**780 requests/day**
-(26 routes × 30 dates), paced ~3s apart with jitter. That is hours in one
-process, so scanning is split across **4 parallel CI shards** (~15 min wall
-clock, and each shard gets its own runner IP, keeping the per-IP rate low).
-Watch the run logs: they print the offer count, a sample of any errors, and
-which routes came back empty.
-
----
-
-## Contributing
-
-Issues and pull requests are welcome. The test suite is stdlib-only and needs
-no network — `python -m unittest discover -s tests` runs in well under a
-second, and every past bug in the detector has a regression test, so start
-there if you are changing how fares are scored.
-
-Adding a data source is deliberately small: implement `search()` on
-`FlightProvider` in `flightdeals/providers/`, and select it with `PROVIDER=`.
-
-## Disclaimer
-
-This project reads Google Flights' public web endpoint through `fast-flights`.
-There is no official free flight-price API, and this arrangement can break
-whenever Google changes their page format. It is intended for personal,
-low-volume price monitoring; please respect Google's terms of service and do
-not point it at a route list large enough to be a nuisance.
-
-Fares are informational. Always confirm the price with the airline before
-booking — an alert is a prompt to look, not a quote.
-
----
-
-## Notes & limitations
-
-- **Unofficial data source.** `fast-flights` reads Google Flights' internal
-  endpoint; there's no official free flight API. It works well but can break if
-  Google changes their page format — pin/upgrade the version in
-  `requirements.txt` if a run suddenly returns nothing. Using it for personal,
-  low-volume monitoring is the intended use; respect Google's terms.
-- **Datacenter IPs can occasionally be throttled.** If a run logs lots of
-  "search error(s)" or zero offers across every route, Google likely rate
-  -limited the GitHub runner. The service fails soft (records the error, still
-  emails what it has) and usually recovers next run. You can set an `FF_PROXY`
-  env var to route the fetcher through a proxy if this becomes persistent.
-- **Baseline needs a few days.** Until a route has `MIN_SAMPLES` (default 5)
-  *days* of history, it shows "building baseline" and won't flag deals — by
-  design, to avoid false alarms on thin data.
-- **Always verify before booking.** The email links to Google Flights for each
-  deal; treat the alert as a heads-up, not a booking.
-- **Swapping providers** is a one-file job — implement `FlightProvider.search`
-  in `flightdeals/providers/` and set `PROVIDER=<name>`.
+[MIT](LICENSE)
