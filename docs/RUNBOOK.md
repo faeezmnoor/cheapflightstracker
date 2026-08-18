@@ -133,6 +133,29 @@ python scripts/probe_destinations.py
 Add a curated Google Maps query in `DESTINATION_MAP_QUERIES` at the same time,
 or the row falls back to a guess derived from the label.
 
+### Renaming the default branch
+
+Audited: **nothing in this repository hardcodes the branch name.** Workflows use
+`GITHUB_REF_NAME` for their push-back, `ci.yml` triggers on `branches: ["**"]`,
+and the README's CI badge pins no branch. So the code side is clear and the
+rename is a Settings action, not a code change.
+
+The one real hazard is the schedule. GitHub registers `schedule:` triggers
+against the default branch and refreshes them on push, so a rename can stop the
+cron until the next commit lands — silently, with no failed run to find.
+
+1. Settings → Branches → rename. Use GitHub's rename button rather than
+   creating a new branch: it retargets open PRs and leaves a redirect.
+2. **Immediately push any commit** to the renamed branch. This is the step that
+   re-registers the schedule; skipping it is the whole risk.
+3. Next morning, confirm a run with event `schedule` actually appears in the
+   Actions tab. A `workflow_dispatch` run does **not** prove the cron is
+   registered — that mistake is what made 13 Aug confusing.
+
+If no scheduled run appears the following day *after* 05:00 UTC, the
+registration did not take; push again, and check `python
+scripts/check_liveness.py`, which fails once the history stops advancing.
+
 ### Reviewing thresholds
 
 Worth doing once ~30 days of history have accumulated. Baselines tighten as
