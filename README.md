@@ -2,6 +2,7 @@
 
 **Finds genuinely underpriced flights out of Kuala Lumpur — not just cheap ones.**
 
+[![CI](https://github.com/faeezmnoor/cheapflightstracker/actions/workflows/ci.yml/badge.svg)](https://github.com/faeezmnoor/cheapflightstracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![No API key](https://img.shields.io/badge/API%20key-not%20required-brightgreen)
@@ -12,6 +13,15 @@ departure date in the next 30 days**, and emails you the fares that are unusual
 
 It runs on GitHub Actions, reads live fares from Google Flights with **no API key**,
 and sends the digest over SMTP. Nothing to host, nothing to pay for.
+
+<p align="center">
+  <img src="docs/assets/digest-preview.png" width="640"
+       alt="A digest email: KL to Surabaya at MYR 369, 20% off, flagged NEW LOW,
+            with supporting statistics and a cheapest-today table below">
+  <br>
+  <sub>A real digest, replayed from recorded history — not a mock-up.
+  Regenerate with <code>python scripts/render_preview.py</code>.</sub>
+</p>
 
 ---
 
@@ -42,10 +52,18 @@ move, and asks three questions of the route's own history of daily-cheapest fare
 | **Is it anomalous?** | modified z-score (MAD-based) | Comparable across routes: −3 means the same on a MYR 200 fare and a MYR 2,000 one. |
 | **Is it a new low?** | cheaper than anything on record | Strongest signal, and naturally noise-resistant — bad scrapes push prices *up*, so they cannot fake a low. |
 
-A fare qualifies on **any** of those, behind two floors: **≥12% off and ≥MYR 40
+A fare qualifies on a new low, on landing in the rare tail, or on a large discount
+**that is also still rare** — always behind two floors: **≥12% off and ≥MYR 40
 saved**. Without them, a route sitting at one price all week scores z = −4.75 on a
 dip most travellers would shrug at. **Severe** requires *rare **and** large* — a
 big z-score alone is never enough.
+
+That rarity requirement on the discount path is not decoration. A fare that steps
+down to a new level and holds there keeps scoring the same discount until the
+median catches up days later: one route sat at exactly the same price for four
+days while the headline stayed "23% off" and its percentile climbed 0% → 17% →
+29% → 38%. By day four the email was announcing a week-old price change as
+today's opportunity.
 
 ## Not saying the same thing twice
 
@@ -56,18 +74,74 @@ morning until the median caught up with it.
 So each alert is recorded, and a route is only mentioned again once the fare drops
 a further 5% or a week has passed.
 
-## What you get
+## How it checks itself
 
-> **✈️ 🔥 3 underpriced KL→Indonesia flights (1 severe) — best: KL→Medan 50% off**
->
-> - **KL → Medan** — **MYR 89** · 50% off · save MYR 90 *(direct, 12 Sep)*
->   <br><sub>cheapest in 31 days of tracking · only 2% of tracked days were this
->   cheap · 4.1 robust deviations below usual</sub>
-> - **KL → Jakarta** — **MYR 247** · 30% off · save MYR 107 *(1 stop)*
-> - …plus a cheapest-today table for all 26 routes.
+Every defect this project has shipped produced a *plausible* email — arriving on
+time, rendering correctly, and wrong. None of them crashed. The test suite was
+green for all of them. So "it ran" is not treated as evidence of anything.
 
-Every city carries a 📍 map link, because an IATA code tells you nothing about
-whether a place is a beach or the middle of Kalimantan.
+[`qa/`](qa/) is an independent auditor: it re-derives every number from the raw
+price history with a **second, separately written implementation** and compares
+that against what the email claims. It deliberately does not import `flightdeals` —
+two derivations that agree is evidence, one implementation checking itself is not,
+and a test enforces the separation.
+
+It runs **before the email is sent**. A blocking finding withholds the alerts and
+says so in a banner, keeping the cheapest-today table — because a silently shorter
+email is indistinguishable from a quiet morning, which is how several incidents ran
+unnoticed for days.
+
+Fifteen checks, each traceable to a real incident in
+[`docs/POSTMORTEMS.md`](docs/POSTMORTEMS.md). Two are worth singling out, because
+they guard the failure this data source actually has:
+
+> The provider answers a **throttled** request with HTTP 200 and an empty itinerary
+> list — byte-for-byte what "no flights that day" looks like. Coverage can fall by
+> a third with every run reporting success and no error logged anywhere. And a
+> route priced from 2 of 30 dates always reads *high*, because the dates that go
+> missing are disproportionately the cheap ones.
+
+Those rows are labelled *"partial scan · only N of 30 dates returned"* in the
+digest, never alerted on, and never written to history — an inflated daily-cheapest
+would raise the median and manufacture a fake bargain tomorrow. The header states
+coverage outright, in red below 75%.
+
+```bash
+python scripts/replay_audit.py --all     # replay every recorded day past the auditor
+python scripts/check_liveness.py         # did the job run, and did it see anything?
+```
+
+`replay_audit.py` is the real pre-merge gate: it re-runs past days against real
+recorded history, so a change that would have sent a wrong email on a day that
+actually happened fails in CI rather than in an inbox.
+
+## Looking further out than 30 days
+
+The daily window is the *wrong end* of the booking curve. Measured on this
+project's own recorded prices, normalised per route:
+
+| Days before departure | 1–5 | 6–10 | 11–15 | 16–20 | 21–25 | 26–30 |
+|---|---|---|---|---|---|---|
+| Relative price | **1.077** | 1.014 | 1.040 | 1.000 | **0.937** | 0.972 |
+
+Fares 3–4 weeks out run ~10% below fares booked inside a week, and the curve has
+not bottomed by day 30. Southeast Asia is repeatedly measured to bottom at 3–6
+months, and AirAsia's sale campaigns sell travel 6–12 months ahead — none of which
+a 30-day window can see.
+
+So [`scripts/horizon_scan.py`](scripts/horizon_scan.py) scans **two contiguous
+30-day blocks** (3 and 5 months out) in full, weekly, into its own store. Results
+appear under *"Cheaper if you fly later"*, never merged into the alerts.
+
+Blocks, not a sparse sample — that was the first design and it could not support
+its own conclusion. Taking 10 of 30 dates **misses the true cheapest fare 41% of
+the time and reads a mean 13.9% high**, the same size as the discount it was meant
+to find. Coverage *is* the bias, so both windows must clear 80% before they are
+compared at all.
+
+One honest limit: a block five months out is also a different *season*, so the
+section claims "cheaper to **fly** then", not "book early and save". A single
+comparison cannot separate the two.
 
 ## How it works
 
@@ -80,6 +154,7 @@ whether a place is a beach or the middle of Kalimantan.
         ├─ search.py       every route × every date in the window
         ├─ baseline.py     route "usual price" + per-departure-date series
         ├─ detector.py     confirmed price drops, then merely cheap dates
+        ├─ qa/checks.py    audit the digest BEFORE it sends; withhold on doubt
         ├─ emailer.py      build + send the HTML/text digest via SMTP
         └─ baseline.py     append today's fares, commit history back to the repo
 ```
@@ -106,6 +181,12 @@ Because the data source needs no API key, the only thing to configure is email.
 3. **Turn it on** — the workflow runs daily. To test now: Actions → *Daily flight
    deals* → Run workflow (tick *dry_run* to preview without sending).
 
+> **Expect it late.** The cron says 01:00 UTC, but GitHub queues scheduled
+> workflows best-effort and no run in this project's history has ever started on
+> time — every one has fired 2–3 hours behind. Don't conclude a run is missing
+> before ~05:00 UTC. Doing so once produced a duplicate digest 25 minutes before
+> the real one arrived.
+
 ## Run it locally
 
 ```bash
@@ -129,6 +210,30 @@ CURRENCY=SGD  REGION=sg          # price it in the market you buy from
 Google prices by market, so `REGION` and `LANGUAGE` make the runner see the fares a
 local shopper sees. Every setting is an env var — see [`.env.example`](.env.example).
 
+`scripts/probe_destinations.py` tells you which candidate airports are actually
+reachable from an origin before you commit 30 searches a day to each. It is how
+Yogyakarta got caught: configured as JOG, which handles only domestic traffic, the
+route returned nothing every day for a week without ever erroring.
+
+## Contributing
+
+Issues and pull requests are welcome. The test suite is stdlib-only and needs no
+network, so `python -m unittest discover -s tests` runs in well under a second.
+
+Two things worth knowing before changing how fares are scored:
+
+- **A green test suite is not evidence.** It was green for every incident in
+  [`docs/POSTMORTEMS.md`](docs/POSTMORTEMS.md). Run
+  `python scripts/replay_audit.py --all` — that is the check that catches things.
+- **Every past bug has a regression test** naming the incident it reproduces.
+  Start there.
+
+[`CLAUDE.md`](CLAUDE.md) carries the invariants, each written after breaking one.
+[`docs/RUNBOOK.md`](docs/RUNBOOK.md) is what to do when a digest looks wrong, and
+[`docs/COMPETITOR-ANALYSIS.md`](docs/COMPETITOR-ANALYSIS.md) records which industry
+techniques were adopted, rejected, and why — including two rejected on
+measurements of this project's own data.
+
 ## Notes
 
 - **Unofficial data source.** Fares come from Google Flights' public web endpoint
@@ -138,6 +243,11 @@ local shopper sees. Every setting is an env var — see [`.env.example`](.env.ex
   terms and don't point it at a route list large enough to be a nuisance.
 - **Baselines need a few days.** Until a route has 5 days of history it shows
   "building baseline" and won't flag anything, by design.
+- **No hidden-city ticketing.** Skiplagging saves real money and is deliberately
+  not implemented: it breaches essentially every carrier's contract, enforcement
+  lands on the passenger's account and miles, and on short-haul point-to-point
+  routes like these the upside is close to zero. Reasoning in
+  [`docs/COMPETITOR-ANALYSIS.md`](docs/COMPETITOR-ANALYSIS.md).
 - **Always confirm before booking.** An alert is a prompt to look, not a quote.
 
 ## License

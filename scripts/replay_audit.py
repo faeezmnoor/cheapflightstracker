@@ -102,7 +102,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--all", action="store_true",
                         help="replay every day that has enough prior history")
     parser.add_argument("--strict", action="store_true",
-                        help="treat warnings as failures too")
+                        help="also fail on warnings about the code (C*). "
+                             "Data-health warnings (D*) are always reported "
+                             "and never fail: they describe today's scrape, "
+                             "not the change being tested.")
     parser.add_argument("--history", default="data/price_history.json")
     parser.add_argument("--series", default="data/date_prices.json")
     args = parser.parse_args(argv)
@@ -144,7 +147,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             print("\n".join("    " + f.render() for f in report.findings))
         if report.blocking:
             worst = max(worst, 2)
-        elif report.findings and args.strict:
+        elif args.strict and any(not f.about_data for f in report.findings):
+            # Only warnings about the *code* fail a push. A thin scrape is real
+            # and worth seeing, but it is not something the person pushing can
+            # fix, and a permanently red build is a build nobody reads.
             worst = max(worst, 1)
 
     if worst == 0:

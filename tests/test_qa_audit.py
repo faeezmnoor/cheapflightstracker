@@ -348,3 +348,32 @@ class GateBehaviourTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CiSeparationTest(unittest.TestCase):
+    """CI must answer one question: did *this change* break the digest?
+
+    It was answering two. `replay_audit --strict` failed on any finding, so a
+    thin scrape upstream turned every push red — including a README-only
+    commit. The same commit passed or failed depending on the day, and whoever
+    pushed next inherited a red build they could not fix. A permanently red
+    build is a build nobody reads, which costs more than the warning is worth.
+
+    Data-health findings are still printed in full. They just do not gate a
+    push; the daily watchdog owns them, because it can act on them.
+    """
+
+    def test_data_findings_are_distinguishable_from_code_findings(self):
+        from qa.findings import WARN, Finding
+        self.assertTrue(Finding("D8", WARN, "coverage").about_data)
+        self.assertTrue(Finding("D7", WARN, "thin route").about_data)
+        self.assertFalse(Finding("C7", WARN, "missing map links").about_data)
+        self.assertFalse(Finding("C1", BLOCK, "alert beats table").about_data)
+
+    def test_every_check_id_declares_a_side(self):
+        """Nothing may be ambiguous: an unclassified check would silently
+        become non-blocking, which is the safe-looking wrong default."""
+        from qa.checks import summarise_checks
+        for check in summarise_checks():
+            self.assertRegex(check, r"^[CD]\d+$",
+                             f"{check} is neither a code (C) nor data (D) check")

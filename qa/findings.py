@@ -30,6 +30,21 @@ class Finding:
     def blocks(self) -> bool:
         return self.severity == BLOCK
 
+    @property
+    def about_data(self) -> bool:
+        """True when this describes the recorded data rather than the code.
+
+        The distinction decides what may fail a push. "This change would render
+        a wrong number" is a property of the diff and is reproducible; "the
+        provider returned 67% of the window today" is a property of the world,
+        and can flip a build red or green with no code change at all. Gating
+        pushes on the second teaches everyone to ignore the first.
+
+        The `D` prefix has always meant a data check; this makes the meaning
+        load-bearing rather than a naming convention.
+        """
+        return self.check.startswith("D")
+
     def render(self) -> str:
         where = f" [{self.route_key}]" if self.route_key else ""
         detail = f"\n        {self.evidence}" if self.evidence else ""

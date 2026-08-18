@@ -244,6 +244,31 @@ is worse than no log line. The next person diagnosing a coverage problem would
 have read "retried 60, recovered 0", concluded the retry was useless, and
 removed it — on evidence that was pure arithmetic error.
 
+### 16. CI answered two questions with one red X
+**Symptom** — every push failed from 17 Aug onward, including a README-only
+commit. Raised by an outside reviewer, correctly.
+**Cause** — `replay_audit.py --strict` failed on *any* finding, and `D7`/`D8`
+are `WARN`. Those checks describe **today's scrape**, not the change being
+tested: coverage sat at 67%, so the build was red for a reason no one pushing
+could fix, and the same commit would pass or fail depending on the day.
+**Why this matters more than a red badge** — a permanently red build is a build
+nobody reads. It costs the signal from the checks that *do* mean the change is
+broken, which is the entire point of having them.
+**Fix** — findings now declare which side they describe. `BLOCK` always fails.
+A `WARN` about the code (`C*`) fails under `--strict`. A `WARN` about the data
+(`D*`) is printed in full and never gates a push. Data health moved to the
+daily liveness watchdog, which runs `check_liveness.py` and can open an issue —
+a place that can actually act on it, unlike a per-push gate.
+**Guarded by** — tests asserting the classification both ways, plus one that
+every check id parses as either `C` or `D`, so an unclassified check cannot
+silently default to non-blocking.
+
+**On the reviewer's framing:** they opened by admitting they had raised it
+partly because a red badge looks bad on a public profile, and then said plainly
+that this was a weak reason which did not carry the argument. They were right
+twice — the weak reason was weak, and the real one (a red build that cannot be
+fixed by the person who turned it red) was strong enough on its own.
+
 ---
 
 ## Known risks, not yet guarded
