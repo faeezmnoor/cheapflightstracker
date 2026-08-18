@@ -299,6 +299,49 @@ def _summary_row(s: RouteSummary, currency: str) -> str:
     )
 
 
+def _horizon_section(result: RunResult) -> str:
+    """Fares further out that beat everything in the next 30 days.
+
+    Its own section, worded as "worth waiting for" rather than "underpriced".
+    These are not statistically unusual fares — they are ordinary fares from a
+    cheaper part of the booking curve, and presenting them as deals would be a
+    different claim than the evidence supports.
+    """
+    if not result.horizon:
+        return ""
+    rows = []
+    for f in result.horizon[:6]:
+        pin = (f' &nbsp;<a href="{escape(f.maps_url)}" style="color:#2c7be5;'
+               f'text-decoration:none;">&#128205;</a>' if f.maps_url else "")
+        rows.append(
+            f'<tr><td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;">'
+            f'KL &rarr; {escape(f.city)}{pin}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;'
+            f'font-weight:700;white-space:nowrap;">'
+            f'{escape(_money(f.price, f.currency))}</td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;'
+            f'color:#666;font-size:13px;white-space:nowrap;">'
+            f'{escape(_short_date(f.departure_date))} '
+            f'<span style="color:#999;">({f.days_ahead}d out)</span></td>'
+            f'<td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;'
+            f'color:#27ae60;">{escape(_pct(f.discount_vs_near))} '
+            f'<span style="color:#999;font-size:12px;">vs next 30d</span></td>'
+            f'</tr>')
+    return f"""
+    <tr><td style="font-size:15px;font-weight:700;color:#333;padding:22px 0 4px;">
+      Cheaper if you can wait</td></tr>
+    <tr><td style="font-size:12px;color:#888;padding:0 0 8px;">
+      Sampled every ~15 days between 45 and 180 days out — not a full scan, so
+      these are prices we happened to see, not the cheapest that exist.</td></tr>
+    <tr><td>
+      <table width="100%" cellpadding="0" cellspacing="0"
+             style="border:1px solid #eee;border-radius:6px;background:#fff;
+                    font-size:14px;color:#333;border-collapse:collapse;">
+        {''.join(rows)}
+      </table>
+    </td></tr>"""
+
+
 def _coverage_note(result: RunResult) -> str:
     """How much of the scanned window actually came back, in the header.
 
@@ -406,6 +449,8 @@ def build_html(result: RunResult) -> str:
         {summary_html}
       </table>
     </td></tr>
+
+    {_horizon_section(result)}
 
     <tr><td style="padding:10px 0 0;font-size:12px;color:#888;">
       {scanned_note}

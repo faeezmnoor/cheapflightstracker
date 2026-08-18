@@ -140,3 +140,8 @@ class RunResult:
     # identical to a quiet market, which is how bad statistics went unnoticed
     # for days at a time.
     qa_withheld: List[str] = field(default_factory=list)
+    # Fares from the far-horizon lane (45-180 days out) that beat everything in
+    # the near window. Kept as its own list, never merged into `deals`: those
+    # are "unusual for this route", these are "worth waiting for", and the two
+    # claims must not share a section or a baseline.
+    horizon: List[object] = field(default_factory=list)

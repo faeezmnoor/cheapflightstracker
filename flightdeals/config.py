@@ -254,6 +254,25 @@ class Config:
     # How many empty searches a shard may re-ask before giving up. Zero
     # disables the retry entirely.
     empty_retry_budget: int = 60
+
+    # --- Far horizon ------------------------------------------------------ #
+    # The 30-day window is the wrong end of the booking curve. Measured on our
+    # own history, fares 21-25 days out run ~6% below a route's median while
+    # fares inside 5 days run ~8% above, and the curve has not bottomed by day
+    # 30 — which is where we stop looking. Every fare-trend study puts
+    # Southeast Asia's sweet spot at 3-6 months, and AirAsia's BIG SALE
+    # campaigns sell travel 6-12 months out, so the best fares on these exact
+    # routes have been structurally invisible.
+    #
+    # Deliberately a separate lane, not a wider window: widening would sextuple
+    # a request budget that is already being throttled, and would make
+    # "cheapest" a sampled claim rather than an exhaustive one.
+    horizon_offsets: List[int] = field(
+        default_factory=lambda: list(range(45, 181, 15)))
+    horizon_path: str = "data/horizon_prices.json"
+    # A far fare must beat the whole near window by this much before the digest
+    # mentions it. Below that it is not worth planning around.
+    horizon_min_discount: float = 0.15
     min_discount: float = 0.12          # floor: never alert on noise
     min_saving: float = 40.0            # floor: cash worth an email
     min_samples: int = 5                # days of route history before flagging
@@ -348,6 +367,10 @@ class Config:
             deal_percentile_guard=_get_float("DEAL_PERCENTILE_GUARD", 0.25),
             min_date_coverage=_get_float("MIN_DATE_COVERAGE", 0.25),
             empty_retry_budget=_get_int("EMPTY_RETRY_BUDGET", 60),
+            horizon_offsets=_get_int_list("HORIZON_OFFSETS",
+                                          list(range(45, 181, 15))),
+            horizon_path=_get("HORIZON_PATH", "data/horizon_prices.json"),
+            horizon_min_discount=_get_float("HORIZON_MIN_DISCOUNT", 0.15),
             min_discount=_get_float("MIN_DISCOUNT", 0.12),
             min_saving=_get_float("MIN_SAVING", 40.0),
             min_date_samples=_get_int("MIN_DATE_SAMPLES", 3),

@@ -50,8 +50,13 @@ reports a BLOCK, the change is wrong on data that really occurred.
 5. **No alert without an absolute floor.** A z-score alone is meaningless — a
    route sitting at one fare all week has a tiny scale, so a trivial dip scores
    z = −4.75. Every qualifying path also requires ≥12% off and ≥MYR 40 saved.
-6. **Departure dates are scanned exhaustively, never sampled.** Google prices
+6. **The 30-day window is scanned exhaustively, never sampled.** Google prices
    each date separately, so a date not probed is a price that cannot be seen.
+   The far-horizon lane (`flightdeals/horizon.py`) *is* sampled, which is why
+   it is a separate store with a separate section that never uses the word
+   "cheapest" — the near window earns that word by covering every date in it.
+   Do not merge the two: a 150-day fare and a 20-day fare are different
+   populations, and pooling them repeats invariant 2's failure in a new place.
 7. **`MIN_SAMPLES` is a safety floor, not a tuning knob.** It was once lowered
    to 1 "to get more alerts". 21 of 26 routes alerted the next morning off
    single junk readings.
@@ -120,6 +125,7 @@ that way. Nothing goes in a file, a log line, or a commit message.
 | `scripts/check_liveness.py` | did the job run at all? |
 | `docs/POSTMORTEMS.md` | every incident, with the check that now catches it |
 | `docs/RUNBOOK.md` | what to do when the digest looks wrong or stops |
+| `docs/COMPETITOR-ANALYSIS.md` | industry techniques surveyed, with a verdict on each |
 
 The `qa/` package deliberately re-implements the statistics rather than
 importing them. That duplication is the entire point: two independent

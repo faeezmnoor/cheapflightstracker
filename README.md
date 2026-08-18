@@ -123,6 +123,36 @@ python scripts/replay_audit.py --all     # replay every recorded day past the au
 python scripts/check_liveness.py         # did the job run at all?
 ```
 
+---
+
+## Looking further out than 30 days
+
+The daily scan covers the next 30 days exhaustively — but that is the *wrong
+end* of the booking curve. Measured on this project's own recorded prices,
+normalised per route:
+
+| Days before departure | 1–5 | 6–10 | 11–15 | 16–20 | 21–25 | 26–30 |
+|---|---|---|---|---|---|---|
+| Relative price | **1.077** | 1.014 | 1.040 | 1.000 | **0.937** | 0.972 |
+
+Fares 3–4 weeks out run ~10% below fares booked inside a week, and the curve
+has not bottomed by day 30. Southeast Asia is repeatedly measured to bottom at
+3–6 months, and AirAsia's sale campaigns sell travel 6–12 months ahead — none
+of which a 30-day window can see.
+
+So there is a second, slower lane: `scripts/horizon_scan.py` samples 45–180
+days out, weekly, into its own store. Its results appear in the digest under
+*"Cheaper if you can wait"* — never merged into the alerts, and never called
+"cheapest", because it samples rather than covers. Pooling a 150-day fare with
+a 20-day one would repeat the same error as pooling one-way with round-trip.
+
+[`docs/COMPETITOR-ANALYSIS.md`](docs/COMPETITOR-ANALYSIS.md) surveys how the
+rest of the industry finds cheap fares — Skiplagged, Kiwi, Going, Secret
+Flying, Google Flights — and records a verdict on each. Several widely repeated
+techniques were **rejected on measurements of this project's own data**: the
+day-of-week effect is 1.8% here, and point-of-sale arbitrage does nothing
+against carriers that price flat.
+
 `replay_audit.py` is the real pre-merge gate: it re-runs past days against real
 recorded history, so a change that would have sent a wrong email on a day that
 actually happened fails in CI rather than in an inbox.

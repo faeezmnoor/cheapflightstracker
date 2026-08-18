@@ -1,0 +1,124 @@
+name: Horizon scan (45-180 days out)
+
+# Samples fares well beyond the daily 30-day window, because that window sits
+# on the wrong part of the booking curve: our own history shows fares inside 5
+# days running ~8% above a route's median and fares 21-25 days out ~6% below,
+# with no sign of a bottom by day 30. Southeast Asia is repeatedly measured to
+# bottom at 3-6 months, and AirAsia's sale campaigns sell travel 6-12 months
+# ahead — none of which the daily scan can see.
+#
+# A SEPARATE workflow on purpose. The daily digest is currently competing for a
+# throttled request budget (coverage fell to 67% in mid-August), and a second
+# lane sharing that budget would degrade the thing that actually gets read. Run
+# here, a throttled horizon scan costs nothing but its own results.
+#
+# MANUAL FOR NOW. The cron below is deliberately commented out: turning it on
+# adds ~312 searches a week against a provider that is already returning empty
+# results. Enable it once the daily digest reports coverage above 80% for three
+# consecutive days — the figure is printed in the email header.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Scan and print, without writing the store"
+        type: boolean
+        default: false
+  # schedule:
+  #   - cron: "0 5 * * 0"      # Sundays, well clear of the daily digest
+
+permissions:
+  contents: write
+
+concurrency:
+  group: horizon-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+
+      - name: Scan the horizon (shard ${{ matrix.shard }})
+        env:
+          PROVIDER: googleflights
+          CURRENCY: ${{ vars.CURRENCY || 'MYR' }}
+          REGION: ${{ vars.REGION || 'my' }}
+          LANGUAGE: ${{ vars.LANGUAGE || 'en' }}
+          ROUTES: ${{ vars.ROUTES }}
+          HORIZON_OFFSETS: ${{ vars.HORIZON_OFFSETS }}
+          HORIZON_PATH: horizon-${{ matrix.shard }}.json
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: >
+          python scripts/horizon_scan.py
+          --shard ${{ matrix.shard }} --shards 2
+          ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        with:
+          name: horizon-${{ matrix.shard }}
+          path: horizon-${{ matrix.shard }}.json
+          if-no-files-found: warn
+
+  merge:
+    needs: scan
+    if: ${{ github.event.inputs.dry_run != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: horizon-*
+          path: shards
+          merge-multiple: true
+
+      - name: Merge shards into the horizon store
+        run: |
+          python - <<'PY'
+          import glob, json
+          from datetime import datetime, timezone
+          from flightdeals.horizon import load_horizon, prune, save_horizon
+
+          store = load_horizon("data/horizon_prices.json")
+          for path in sorted(glob.glob("shards/*.json")):
+              for key, by_day in load_horizon(path).items():
+                  bucket = store.setdefault(key, {})
+                  for day, price in by_day.items():
+                      # Cheapest wins, same rule the daily lane uses, so two
+                      # shards disagreeing never inflates a stored price.
+                      if day not in bucket or price < bucket[day]:
+                          bucket[day] = price
+          store = prune(store, datetime.now(timezone.utc).date())
+          save_horizon("data/horizon_prices.json", store)
+          print(f"merged -> {len(store)} series")
+          PY
+
+      - name: Commit the horizon store
+        run: |
+          git config user.name "flight-deals-bot"
+          git config user.email "actions@github.com"
+          git add data/horizon_prices.json
+          if git diff --staged --quiet; then
+            echo "No horizon changes to commit."
+          else
+            git commit -m "chore: update horizon prices [skip ci]"
+            for i in 1 2 3 4; do
+              if git push; then break; fi
+              echo "push failed, retrying in $((2**i))s"; sleep $((2**i))
+              git pull --rebase origin "${GITHUB_REF_NAME}" || true
+            done
+          fi

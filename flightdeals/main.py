@@ -175,6 +175,27 @@ def report(config: Config, today: date,
     print(f"[report] flagged {len(deals)} deal(s): "
           f"{drops} confirmed price drop(s), {len(deals) - drops} cheap date(s)")
 
+    # The far-horizon lane, if it has been scanned. Compared against this run's
+    # near-window cheapest, and never pooled into the route baselines — a fare
+    # 150 days out belongs to a different population, and mixing the two is the
+    # error that made every one-way look half price when returns shared a
+    # baseline. Optional: a checkout that has never run the weekly scan simply
+    # has nothing to show here.
+    horizon_finds: List[object] = []
+    try:
+        from .horizon import find_bargains, load_horizon
+        near = {s.route_key: s.cheapest.price for s in summaries if s.cheapest}
+        horizon_finds = find_bargains(
+            load_horizon(config.horizon_path), near, today,
+            config.horizon_min_discount,
+            cities={r.key: r.city for r in config.routes},
+            maps_urls={r.key: r.maps_url for r in config.routes},
+            currency=config.currency)
+        if horizon_finds:
+            print(f"[report] {len(horizon_finds)} route(s) cheaper further out")
+    except Exception as exc:                              # noqa: BLE001
+        print(f"[report] horizon lane unavailable: {exc!r}")
+
     result = RunResult(
         run_date=today.isoformat(),
         currency=config.currency,
@@ -183,6 +204,7 @@ def report(config: Config, today: date,
         offers_checked=offers_checked,
         errors=errors,
         scanned_departures=scanned,
+        horizon=horizon_finds,
     )
 
     # QA runs *before* the send, so a wrong alert is caught rather than
