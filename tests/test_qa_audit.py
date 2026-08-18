@@ -377,3 +377,62 @@ class CiSeparationTest(unittest.TestCase):
         for check in summarise_checks():
             self.assertRegex(check, r"^[CD]\d+$",
                              f"{check} is neither a code (C) nor data (D) check")
+
+
+class StaleProseTest(unittest.TestCase):
+    """A replaced docstring that leaves the old one behind is still valid
+    Python, and the old text keeps asserting whatever it used to.
+
+    `scripts/horizon_scan.py` carried both: the rewritten docstring describing
+    two exhaustive blocks, immediately followed by the superseded one still
+    claiming the lane was "sampled, not exhaustive" over "45-180 days". The two
+    shared a `\"\"\"` delimiter, so the file parsed, all 123 tests passed, and
+    nothing anywhere noticed that half the module's documentation now said the
+    opposite of what the code did.
+
+    This is the project's signature failure in a new place: plausible, valid,
+    and wrong. Cheap to detect, so it is detected.
+    """
+
+    def _modules(self):
+        import pathlib
+        root = pathlib.Path(__file__).resolve().parent.parent
+        for pattern in ("flightdeals/**/*.py", "qa/*.py", "scripts/*.py",
+                        "tests/*.py"):
+            yield from root.glob(pattern)
+
+    def test_no_module_carries_a_second_orphaned_docstring(self):
+        import ast
+        offenders = []
+        for path in sorted(self._modules()):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            strings = [n for n in tree.body
+                       if isinstance(n, ast.Expr)
+                       and isinstance(n.value, ast.Constant)
+                       and isinstance(n.value.value, str)]
+            if len(strings) > 1:
+                offenders.append(f"{path.name}: {len(strings)} module-level "
+                                 f"string statements, expected 1")
+        self.assertEqual(offenders, [],
+                         "a superseded docstring was left in place; the old "
+                         "text still reads as documentation")
+
+    def test_the_horizon_lane_is_never_described_as_sampled(self):
+        """It was, until 18 Aug, and then stopped being true. The phrase is
+        specific enough to grep for and load-bearing enough to be worth it."""
+        import pathlib
+        root = pathlib.Path(__file__).resolve().parent.parent
+        offenders = []
+        for path in sorted(list(self._modules())
+                           + list(root.glob("docs/*.md"))
+                           + [root / "README.md", root / "CLAUDE.md"]):
+            # This file holds the sentinels; it would always match itself.
+            if path.name == pathlib.Path(__file__).name:
+                continue
+            text = path.read_text(encoding="utf-8")
+            for phrase in ("sampled, not exhaustive", "samples 45", "45-180"):
+                if phrase in text:
+                    offenders.append(f"{path.name}: {phrase!r}")
+        self.assertEqual(offenders, [],
+                         "the horizon lane scans two 30-day blocks in full — "
+                         "these describe the design it replaced")

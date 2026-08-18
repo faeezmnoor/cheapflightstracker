@@ -16,20 +16,6 @@ the signal were the same size. Sparse probes also land on peak dates by luck.
 
 Both blocks are compared min-to-min against the near window, which is only fair
 because both are measured the same way.
-"""Scan the far horizon (45-180 days out) and record what it costs.
-
-Run weekly, separately from the daily digest. Fares this far out move slowly,
-and the daily scan is already competing for a throttled request budget — a
-second lane sharing that budget would degrade the thing people actually read.
-
-    python scripts/horizon_scan.py                     # every route
-    python scripts/horizon_scan.py --shard 0 --shards 2
-    python scripts/horizon_scan.py --provider mock --dry-run
-
-Unlike the daily scan this is **sampled, not exhaustive** — every ~15 days
-rather than every date. That is a deliberate difference in kind, and why its
-results are never called "cheapest": the near window earns that word by
-covering every date in it, and this lane does not.
 """
 
 from __future__ import annotations

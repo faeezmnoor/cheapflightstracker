@@ -1,4 +1,4 @@
-"""The far-horizon lane — fares 45-180 days out, sampled weekly.
+"""The far-horizon lane — two contiguous 30-day blocks, scanned weekly.
 
 Its whole reason to exist is that the 30-day window sits on the wrong part of
 the booking curve: measured on our own history, fares inside 5 days run ~8%
