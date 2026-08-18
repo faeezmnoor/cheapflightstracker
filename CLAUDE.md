@@ -52,11 +52,15 @@ reports a BLOCK, the change is wrong on data that really occurred.
    z = −4.75. Every qualifying path also requires ≥12% off and ≥MYR 40 saved.
 6. **The 30-day window is scanned exhaustively, never sampled.** Google prices
    each date separately, so a date not probed is a price that cannot be seen.
-   The far-horizon lane (`flightdeals/horizon.py`) *is* sampled, which is why
-   it is a separate store with a separate section that never uses the word
-   "cheapest" — the near window earns that word by covering every date in it.
-   Do not merge the two: a 150-day fare and a 20-day fare are different
-   populations, and pooling them repeats invariant 2's failure in a new place.
+   The far-horizon lane (`flightdeals/horizon.py`) is exhaustive too, within
+   each of its two 30-day blocks — it was sampled once, and could not support
+   its own conclusion: 10 of 30 dates misses the true cheapest fare 41% of the
+   time and reads a mean 13.9% high, the same size as the discount it existed
+   to detect. **Coverage is the bias**: a window at 50% coverage reports a
+   minimum ~12% too high, at 80% ~3.6%, so the two windows are only compared
+   when both clear 80%. Do not merge their stores either: a 150-day fare and a
+   20-day fare are different populations, and pooling them repeats invariant
+   2's failure in a new place.
 7. **`MIN_SAMPLES` is a safety floor, not a tuning knob.** It was once lowered
    to 1 "to get more alerts". 21 of 26 routes alerted the next morning off
    single junk readings.

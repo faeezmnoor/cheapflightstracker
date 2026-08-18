@@ -1,7 +1,8 @@
-name: Horizon scan (45-180 days out)
+name: Horizon scan (two 30-day blocks, 3 and 5 months out)
 
-# Samples fares well beyond the daily 30-day window, because that window sits
-# on the wrong part of the booking curve: our own history shows fares inside 5
+# Scans two contiguous 30-day blocks (days 90-119 and 150-179) in full, well
+# beyond the daily window, because that window sits on the wrong part of the
+# booking curve: our own history shows fares inside 5
 # days running ~8% above a route's median and fares 21-25 days out ~6% below,
 # with no sign of a bottom by day 30. Southeast Asia is repeatedly measured to
 # bottom at 3-6 months, and AirAsia's sale campaigns sell travel 6-12 months
@@ -12,9 +13,16 @@ name: Horizon scan (45-180 days out)
 # lane sharing that budget would degrade the thing that actually gets read. Run
 # here, a throttled horizon scan costs nothing but its own results.
 #
+# Blocks rather than a sparse sample: taking 10 of 30 dates misses the true
+# cheapest fare 41% of the time and reads a mean 13.9% high on our own data,
+# which is the same size as the discount it was meant to detect. Both blocks
+# are compared min-to-min against the near window, and only when both sides
+# are at least 80% covered — at 50% coverage a window's minimum reads ~12%
+# high, enough to invent a bargain out of measurement alone.
+#
 # MANUAL FOR NOW. The cron below is deliberately commented out: turning it on
-# adds ~312 searches a week against a provider that is already returning empty
-# results. Enable it once the daily digest reports coverage above 80% for three
+# adds ~1,560 searches a week against a provider that is already returning
+# empty results. Enable it once the daily digest reports coverage above 80% for three
 # consecutive days — the figure is printed in the email header.
 on:
   workflow_dispatch:
@@ -40,7 +48,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1]
+        shard: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -55,12 +63,13 @@ jobs:
           REGION: ${{ vars.REGION || 'my' }}
           LANGUAGE: ${{ vars.LANGUAGE || 'en' }}
           ROUTES: ${{ vars.ROUTES }}
-          HORIZON_OFFSETS: ${{ vars.HORIZON_OFFSETS }}
+          HORIZON_BLOCK_STARTS: ${{ vars.HORIZON_BLOCK_STARTS }}
+          HORIZON_BLOCK_DAYS: ${{ vars.HORIZON_BLOCK_DAYS }}
           HORIZON_PATH: horizon-${{ matrix.shard }}.json
           DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: >
           python scripts/horizon_scan.py
-          --shard ${{ matrix.shard }} --shards 2
+          --shard ${{ matrix.shard }} --shards 4
           ${{ github.event.inputs.dry_run == 'true' && '--dry-run' || '' }}
 
       - uses: actions/upload-artifact@v4

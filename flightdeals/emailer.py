@@ -300,12 +300,13 @@ def _summary_row(s: RouteSummary, currency: str) -> str:
 
 
 def _horizon_section(result: RunResult) -> str:
-    """Fares further out that beat everything in the next 30 days.
+    """Blocks further out that are cheaper than anything in the next 30 days.
 
-    Its own section, worded as "worth waiting for" rather than "underpriced".
-    These are not statistically unusual fares — they are ordinary fares from a
-    cheaper part of the booking curve, and presenting them as deals would be a
-    different claim than the evidence supports.
+    Worded as a claim about *when to fly*, not about booking early. A block 5
+    months out is also a different time of year, and a single comparison cannot
+    separate the season from the lead time — so the section says "cheaper to
+    fly then", which is true either way, rather than "book early and save",
+    which the evidence does not support.
     """
     if not result.horizon:
         return ""
@@ -321,18 +322,23 @@ def _horizon_section(result: RunResult) -> str:
             f'{escape(_money(f.price, f.currency))}</td>'
             f'<td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;'
             f'color:#666;font-size:13px;white-space:nowrap;">'
-            f'{escape(_short_date(f.departure_date))} '
-            f'<span style="color:#999;">({f.days_ahead}d out)</span></td>'
+            f'{escape(_short_date(f.departure_date))}'
+            f'<br><span style="color:#999;font-size:11px;">'
+            f'in {escape(f.block_label)}</span></td>'
             f'<td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;'
-            f'color:#27ae60;">{escape(_pct(f.discount_vs_near))} '
-            f'<span style="color:#999;font-size:12px;">vs next 30d</span></td>'
-            f'</tr>')
+            f'color:#27ae60;white-space:nowrap;">'
+            f'{escape(_pct(f.discount_vs_near))} cheaper'
+            f'<br><span style="color:#999;font-size:11px;">'
+            f'than {escape(_money(f.near_cheapest, f.currency))} in the next 30d'
+            f'</span></td></tr>')
     return f"""
     <tr><td style="font-size:15px;font-weight:700;color:#333;padding:22px 0 4px;">
-      Cheaper if you can wait</td></tr>
+      Cheaper if you fly later</td></tr>
     <tr><td style="font-size:12px;color:#888;padding:0 0 8px;">
-      Sampled every ~15 days between 45 and 180 days out — not a full scan, so
-      these are prices we happened to see, not the cheapest that exist.</td></tr>
+      Two 30-day blocks further out, scanned in full and compared like for like
+      against the next 30 days. These months are cheaper to <em>fly</em> —
+      which mixes seasonality with booking early, so treat it as "go then",
+      not "book now".</td></tr>
     <tr><td>
       <table width="100%" cellpadding="0" cellspacing="0"
              style="border:1px solid #eee;border-radius:6px;background:#fff;

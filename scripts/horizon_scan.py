@@ -1,4 +1,21 @@
 #!/usr/bin/env python3
+"""Scan two contiguous 30-day blocks well beyond the daily window.
+
+Run weekly, separately from the daily digest — fares this far out move slowly,
+and the daily scan is already competing for a throttled request budget.
+
+    python scripts/horizon_scan.py                      # every route
+    python scripts/horizon_scan.py --shard 0 --shards 4
+    python scripts/horizon_scan.py --provider mock --dry-run
+
+**Exhaustive within each block**, exactly like the near window. An earlier
+version sampled every 15th day and could not support its own conclusion: on our
+own data, taking 10 of 30 dates misses the true cheapest fare 41% of the time
+and reads a mean 13.9% high — against a 15% discount threshold, so the bias and
+the signal were the same size. Sparse probes also land on peak dates by luck.
+
+Both blocks are compared min-to-min against the near window, which is only fair
+because both are measured the same way.
 """Scan the far horizon (45-180 days out) and record what it costs.
 
 Run weekly, separately from the daily digest. Fares this far out move slowly,
@@ -28,7 +45,8 @@ from typing import List, Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from flightdeals.config import Config, shard_routes
-from flightdeals.horizon import load_horizon, prune, record, save_horizon
+from flightdeals.horizon import (block_dates, load_horizon, prune, record,
+                                save_horizon)
 from flightdeals.models import Offer
 from flightdeals.providers import get_provider
 from flightdeals.providers.base import ProviderError
@@ -37,8 +55,9 @@ from flightdeals.providers.base import ProviderError
 def scan_horizon(config: Config, today: date) -> tuple[List[Offer], List[str]]:
     provider = get_provider(config)
     offline = getattr(provider, "offline", False)
-    dates = [(today + timedelta(days=n)).isoformat()
-             for n in sorted(set(config.horizon_offsets))]
+    dates = [d for block in block_dates(config.horizon_block_starts,
+                                        config.horizon_block_days, today)
+             for d in block]
     print(f"[horizon] {today.isoformat()} | {len(config.routes)} route(s) x "
           f"{len(dates)} date(s) = {len(config.routes) * len(dates)} searches")
 

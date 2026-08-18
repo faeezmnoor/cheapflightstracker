@@ -184,10 +184,15 @@ def report(config: Config, today: date,
     horizon_finds: List[object] = []
     try:
         from .horizon import find_bargains, load_horizon
-        near = {s.route_key: s.cheapest.price for s in summaries if s.cheapest}
+        # Coverage travels with the price on both sides: comparing a full near
+        # window against a thin far block would find a difference in the
+        # measurement rather than in the market.
+        near = {s.route_key: (s.cheapest.price, s.dates_seen, s.dates_scanned)
+                for s in summaries if s.cheapest}
         horizon_finds = find_bargains(
             load_horizon(config.horizon_path), near, today,
-            config.horizon_min_discount,
+            config.horizon_block_starts, config.horizon_block_days,
+            config.horizon_min_discount, config.horizon_min_coverage,
             cities={r.key: r.city for r in config.routes},
             maps_urls={r.key: r.maps_url for r in config.routes},
             currency=config.currency)

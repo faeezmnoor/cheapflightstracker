@@ -267,12 +267,28 @@ class Config:
     # Deliberately a separate lane, not a wider window: widening would sextuple
     # a request budget that is already being throttled, and would make
     # "cheapest" a sampled claim rather than an exhaustive one.
-    horizon_offsets: List[int] = field(
-        default_factory=lambda: list(range(45, 181, 15)))
+    # Two *contiguous, exhaustively scanned* 30-day blocks, not a sparse
+    # sample. Sampling was the first design and it could not support its own
+    # conclusion: measured on our own data, taking 10 of 30 dates misses the
+    # true cheapest fare 41% of the time and overstates it by a mean of 13.9% —
+    # against a 15% discount threshold, so the two roughly cancelled. Sparse
+    # probes also land on peak dates by luck: 3 of the original 10 fell in
+    # Christmas/New Year or the Chinese New Year window.
+    #
+    # A block is compared min-to-min against the near window, which is only
+    # fair if both sides are measured the same way.
+    horizon_block_starts: List[int] = field(default_factory=lambda: [90, 150])
+    horizon_block_days: int = 30
     horizon_path: str = "data/horizon_prices.json"
-    # A far fare must beat the whole near window by this much before the digest
-    # mentions it. Below that it is not worth planning around.
+    # A far block must beat the near window by this much to be worth saying.
     horizon_min_discount: float = 0.15
+    # ...and both windows must be this well covered before they are compared at
+    # all. Coverage drives the bias directly: at 50% the minimum of a window
+    # reads ~12% high, which would swallow the whole discount threshold. At 80%
+    # it is ~3.6%, comfortably inside it. Stricter than the 50% used to label a
+    # digest row, because a row states a price while this states which window
+    # is cheaper — a claim that needs both sides measured alike.
+    horizon_min_coverage: float = 0.80
     min_discount: float = 0.12          # floor: never alert on noise
     min_saving: float = 40.0            # floor: cash worth an email
     min_samples: int = 5                # days of route history before flagging
@@ -367,10 +383,11 @@ class Config:
             deal_percentile_guard=_get_float("DEAL_PERCENTILE_GUARD", 0.25),
             min_date_coverage=_get_float("MIN_DATE_COVERAGE", 0.25),
             empty_retry_budget=_get_int("EMPTY_RETRY_BUDGET", 60),
-            horizon_offsets=_get_int_list("HORIZON_OFFSETS",
-                                          list(range(45, 181, 15))),
+            horizon_block_starts=_get_int_list("HORIZON_BLOCK_STARTS", [90, 150]),
+            horizon_block_days=_get_int("HORIZON_BLOCK_DAYS", 30),
             horizon_path=_get("HORIZON_PATH", "data/horizon_prices.json"),
             horizon_min_discount=_get_float("HORIZON_MIN_DISCOUNT", 0.15),
+            horizon_min_coverage=_get_float("HORIZON_MIN_COVERAGE", 0.80),
             min_discount=_get_float("MIN_DISCOUNT", 0.12),
             min_saving=_get_float("MIN_SAVING", 40.0),
             min_date_samples=_get_int("MIN_DATE_SAMPLES", 3),

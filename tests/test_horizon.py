@@ -14,14 +14,38 @@ re-checked in weeks must not be presented as bookable.
 import os, sys, unittest, tempfile
 from datetime import date, timedelta
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from flightdeals.horizon import (find_bargains, load_horizon, prune, record,
-                                 save_horizon, series_key)
+from flightdeals.horizon import (block_dates, find_bargains, load_horizon,
+                                 prune, record, save_horizon, series_key)
 from flightdeals.models import Offer
 
 TODAY = date(2026, 8, 18)
 
 def off(dest, dep, price):
     return Offer("KUL", dest, dep, price, "MYR", "one_way")
+
+
+BLOCKS, BLOCK_DAYS = [90, 150], 30
+
+
+def full_block(dest, cheapest, block_index=0, covered=30, observed="2026-08-18"):
+    """A block scanned end to end, with one genuinely cheap date in it."""
+    dates = block_dates(BLOCKS, BLOCK_DAYS, TODAY)[block_index][:covered]
+    offers = [off(dest, d, 900.0) for d in dates]
+    if offers:
+        offers[len(offers) // 2] = off(dest, dates[len(dates) // 2], cheapest)
+    return record({}, offers, observed)
+
+
+def near(price, seen=30, total=30):
+    return {"KUL-DPS": (price, seen, total)}
+
+
+def bargains(store, near_map, **kw):
+    opts = dict(block_starts=BLOCKS, block_days=BLOCK_DAYS,
+                min_discount=0.15, min_coverage=0.80,
+                cities={"KUL-DPS": "Bali"})
+    opts.update(kw)
+    return find_bargains(store, near_map, TODAY, **opts)
 
 class HorizonStoreTest(unittest.TestCase):
     def test_roundtrip_store(self):
@@ -32,22 +56,44 @@ class HorizonStoreTest(unittest.TestCase):
             self.assertEqual(load_horizon(p), s)
 
     def test_finds_a_bargain_and_states_the_gap(self):
-        s = record({}, [off("DPS", "2026-11-12", 280.0)], "2026-08-18")
-        f = find_bargains(s, {"KUL-DPS": 459.0}, TODAY, 0.15,
-                          cities={"KUL-DPS": "Bali"})
+        store = full_block("DPS", 280.0)
+        f = bargains(store, near(459.0))
         self.assertEqual(len(f), 1)
         self.assertAlmostEqual(f[0].discount_vs_near, 0.3900, places=3)
-        self.assertEqual(f[0].days_ahead, 86)
         self.assertEqual(f[0].saving, 179.0)
+        self.assertEqual((f[0].far_seen, f[0].far_total), (30, 30))
+        self.assertIn("\u2013", f[0].block_label)      # "16 Nov - 15 Dec"
 
     def test_small_gaps_are_not_worth_planning_around(self):
-        s = record({}, [off("DPS", "2026-11-12", 430.0)], "2026-08-18")
-        self.assertEqual(find_bargains(s, {"KUL-DPS": 459.0}, TODAY, 0.15), [])
+        self.assertEqual(bargains(full_block("DPS", 430.0), near(459.0)), [])
+
+    def test_a_thin_far_block_is_not_compared_at_all(self):
+        """The whole point of the rewrite. Comparing the minimum of a
+        half-covered block against a fully covered near window finds a
+        difference in the measurement, not in the market: at 50% coverage the
+        minimum reads ~12% high, which is most of the discount threshold."""
+        thin = full_block("DPS", 280.0, covered=12)     # 12 of 30
+        self.assertEqual(bargains(thin, near(459.0)), [])
+        # ...and the same block, fully scanned, does report.
+        self.assertEqual(len(bargains(full_block("DPS", 280.0), near(459.0))), 1)
+
+    def test_a_thin_near_window_also_blocks_the_comparison(self):
+        """Unfairness runs both ways: a thin near window understates today's
+        cheapest, which would invent a far-side bargain."""
+        store = full_block("DPS", 280.0)
+        self.assertEqual(bargains(store, near(459.0, seen=9, total=30)), [])
 
     def test_stale_readings_are_ignored(self):
-        # A price seen 40 days ago is not a price you can book today.
-        s = record({}, [off("DPS", "2026-11-12", 280.0)], "2026-07-09")
-        self.assertEqual(find_bargains(s, {"KUL-DPS": 459.0}, TODAY, 0.15), [])
+        # A price seen six weeks ago is not a price you can book today.
+        store = full_block("DPS", 280.0, observed="2026-07-01")
+        self.assertEqual(bargains(store, near(459.0)), [])
+
+    def test_a_route_is_reported_once_at_its_best_block(self):
+        store = full_block("DPS", 400.0, block_index=0)
+        store.update(full_block("DPS", 280.0, block_index=1))
+        f = bargains(store, near(459.0))
+        self.assertEqual(len(f), 1)
+        self.assertEqual(f[0].price, 280.0)
 
     def test_past_departures_are_pruned(self):
         s = record({}, [off("DPS", "2026-08-01", 100.0)], "2026-07-20")
@@ -58,8 +104,6 @@ class HorizonStoreTest(unittest.TestCase):
         in it can reach build_daily_series, which reads price_history only."""
         s = record({}, [off("DPS", "2026-11-12", 280.0)], "2026-08-18")
         self.assertEqual(list(s), ["KUL-DPS|one_way|2026-11-12"])
-        self.assertNotIn("observed_date", str(s))
-
 
 
 class HorizonDigestTest(unittest.TestCase):
@@ -67,11 +111,8 @@ class HorizonDigestTest(unittest.TestCase):
 
     def _result(self):
         from flightdeals.emailer import build_html
-        from flightdeals.horizon import find_bargains, record
         from flightdeals.models import Baseline, RouteSummary, RunResult
-        store = record({}, [off("DPS", "2026-11-12", 280.0)], "2026-08-18")
-        finds = find_bargains(store, {"KUL-DPS": 459.0}, TODAY, 0.15,
-                              cities={"KUL-DPS": "Bali"})
+        finds = bargains(full_block("DPS", 280.0), near(459.0))
         offer = off("DPS", "2026-09-06", 459.0)
         summaries = [RouteSummary("KUL-DPS", "Bali", offer,
                                   Baseline("KUL-DPS", 9, median=470.0), None,
@@ -82,15 +123,17 @@ class HorizonDigestTest(unittest.TestCase):
 
     def test_it_renders_as_its_own_section(self):
         html = self._result()
-        self.assertIn("Cheaper if you can wait", html)
+        self.assertIn("Cheaper if you fly later", html)
         self.assertIn("MYR 280", html)
-        self.assertIn("86d out", html)
+        self.assertIn("39% cheaper", html)
 
-    def test_it_never_claims_to_be_a_full_scan(self):
-        """The near window earns the word "cheapest" by covering every date.
-        This lane samples, and must say so rather than borrow the claim."""
+    def test_it_claims_when_to_fly_not_when_to_book(self):
+        """A block 5 months out is also a different season. One comparison
+        cannot separate the two, so the wording must not imply booking early
+        is what saves the money."""
         html = self._result()
-        self.assertIn("not a full scan", html)
+        self.assertIn("go then", html)
+        self.assertNotIn("book early and save", html.lower())
 
     def test_an_empty_horizon_renders_nothing(self):
         from flightdeals.emailer import build_html

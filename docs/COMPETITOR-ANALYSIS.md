@@ -203,11 +203,36 @@ never mixes the two:
 
 | | Near window | Far horizon |
 |---|---|---|
-| Range | next 30 days | ~45–180 days out |
-| Coverage | every date, exhaustive | sampled, every ~15 days |
+| Range | next 30 days | two 30-day blocks, 3 and 5 months out |
+| Coverage | every date, exhaustive | **every date, exhaustive** |
 | Frequency | daily | weekly |
-| Baseline | route history | **its own** — never pooled |
-| Claim | "cheapest in the next 30 days" | "cheapest we have seen further out" |
+| Baseline | route history | **none — compared against the near window** |
+| Claim | "cheapest in the next 30 days" | "cheaper to *fly* then" |
+
+The first version of this lane sampled every 15th day, and that was wrong. On
+our own recorded data, taking 10 of 30 dates **misses the true cheapest fare
+41% of the time and reads a mean 13.9% high** — the same magnitude as the 15%
+discount it was built to detect, so bias and signal cancelled. Sparse probes
+also land on peak dates by luck: 3 of the original 10 fell in Christmas/New
+Year or the Chinese New Year window, which are expensive for calendar reasons
+that have nothing to do with booking early.
+
+Coverage *is* the bias, and it scales predictably:
+
+| Coverage | 30% | 50% | 70% | 80% | 90% |
+|---|---|---|---|---|---|
+| Minimum reads high by | +22% | +11.7% | +5.0% | +3.6% | +0.9% |
+
+So the two windows are compared only when **both** clear 80%. Otherwise a
+well-covered near window against a thin far block finds a difference in the
+measurement rather than in the market — the 17 Aug defect, relocated.
+
+**What this lane cannot do is separate season from lead time.** A block five
+months out is also a different time of year, so "February is cheaper to fly
+than September" is supportable and "book earlier and save" is not. The digest
+wording follows the weaker claim. Keeping the data eventually settles it for
+free: the same calendar dates age into the near window, and comparing a date
+against itself at two lead times isolates the curve from the season.
 
 Keeping the baselines separate is not fussiness. Pooling a 30-day fare with a
 150-day fare is the same error as pooling one-way with round-trip (incident 1):
