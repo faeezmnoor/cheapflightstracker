@@ -5,6 +5,11 @@
       "departure_date": "2026-09-07",
       "price": 379.0
     },
+    "KUL-BTJ": {
+      "date": "2026-08-25",
+      "departure_date": "2026-09-04",
+      "price": 201.0
+    },
     "KUL-DJB": {
       "date": "2026-08-20",
       "departure_date": "2026-09-04",
