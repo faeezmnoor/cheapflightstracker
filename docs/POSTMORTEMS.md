@@ -271,6 +271,31 @@ fixed by the person who turned it red) was strong enough on its own.
 
 ---
 
+## Resolved: the throttling episode (17-26 Aug)
+
+Coverage of the scanned window fell to 67% over 17-18 Aug with **zero errors
+logged**, because the provider answers a throttled request with HTTP 200 and an
+empty itinerary list. It has since recovered and held:
+
+| 17 Aug | 18 Aug | 21 Aug | 22 Aug | 23 Aug | 24 Aug | 25 Aug | 26 Aug |
+|---|---|---|---|---|---|---|---|
+| 68% | 67% | 84% | 86% | 91% | 86% | **97%** | **96%** |
+
+**What is not known is why.** The empty-search retry shipped on 18 Aug at 06:35,
+after that morning's run, so the first scan it could affect was 19 Aug — and
+recovery does coincide. But the throttling may equally have eased on its own.
+One change and one external shift landed in the same window, and a single
+observation cannot separate them. The retry logs how many empty searches it
+re-asked and how many recovered a price, so the attribution can be settled from
+a run log rather than assumed.
+
+Recorded here because "we fixed it" is the tempting summary and is not
+supported. What *is* supported: the degradation was visible the whole time,
+which it had not been before `D7`/`D8` and the coverage line in the digest
+header.
+
+---
+
 ## Known risks, not yet guarded
 
 ### Intra-day scrape variance is larger than expected

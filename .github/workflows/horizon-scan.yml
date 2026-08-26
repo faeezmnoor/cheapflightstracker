@@ -20,10 +20,14 @@ name: Horizon scan (two 30-day blocks, 3 and 5 months out)
 # are at least 80% covered — at 50% coverage a window's minimum reads ~12%
 # high, enough to invent a bargain out of measurement alone.
 #
-# MANUAL FOR NOW. The cron below is deliberately commented out: turning it on
-# adds ~1,560 searches a week against a provider that is already returning
-# empty results. Enable it once the daily digest reports coverage above 80% for three
-# consecutive days — the figure is printed in the email header.
+# ENABLED 26 Aug. It was held back while the provider was returning empty
+# results — adding ~1,560 searches a week to a throttled budget would have
+# degraded the daily digest, which is the thing that actually gets read. The
+# condition set at the time was coverage above 80% for three consecutive days;
+# it has now run six: 84, 86, 91, 86, 97, 96%.
+#
+# If coverage slides below the floor again, comment the schedule back out. The
+# daily digest is the priority; this lane is an extra.
 on:
   workflow_dispatch:
     inputs:
@@ -31,8 +35,8 @@ on:
         description: "Scan and print, without writing the store"
         type: boolean
         default: false
-  # schedule:
-  #   - cron: "0 5 * * 0"      # Sundays, well clear of the daily digest
+  schedule:
+    - cron: "0 5 * * 0"      # Sundays, well clear of the daily digest
 
 permissions:
   contents: write
