@@ -1,9 +1,9 @@
 {
   "alerts": {
     "KUL-BDJ": {
-      "date": "2026-08-12",
-      "departure_date": "2026-09-07",
-      "price": 379.0
+      "date": "2026-08-26",
+      "departure_date": "2026-09-25",
+      "price": 259.0
     },
     "KUL-BTJ": {
       "date": "2026-08-25",
