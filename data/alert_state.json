@@ -6,9 +6,14 @@
       "price": 259.0
     },
     "KUL-BTJ": {
-      "date": "2026-08-25",
-      "departure_date": "2026-09-04",
-      "price": 201.0
+      "date": "2026-09-03",
+      "departure_date": "2026-09-10",
+      "price": 196.0
+    },
+    "KUL-CGK": {
+      "date": "2026-09-03",
+      "departure_date": "2026-09-29",
+      "price": 287.0
     },
     "KUL-DJB": {
       "date": "2026-08-30",
@@ -24,6 +29,11 @@
       "date": "2026-08-19",
       "departure_date": "2026-09-15",
       "price": 820.0
+    },
+    "KUL-PKU": {
+      "date": "2026-09-03",
+      "departure_date": "2026-09-05",
+      "price": 153.0
     },
     "KUL-SOQ": {
       "date": "2026-08-21",
