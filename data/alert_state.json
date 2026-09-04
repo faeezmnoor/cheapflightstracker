@@ -30,10 +30,20 @@
       "departure_date": "2026-09-15",
       "price": 820.0
     },
+    "KUL-PDG": {
+      "date": "2026-09-04",
+      "departure_date": "2026-09-19",
+      "price": 176.0
+    },
     "KUL-PKU": {
       "date": "2026-09-03",
       "departure_date": "2026-09-05",
       "price": 153.0
+    },
+    "KUL-PNK": {
+      "date": "2026-09-04",
+      "departure_date": "2026-09-18",
+      "price": 242.0
     },
     "KUL-SOQ": {
       "date": "2026-08-21",
