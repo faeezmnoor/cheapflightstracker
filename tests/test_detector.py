@@ -340,3 +340,49 @@ class RunCoverageTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SevereRarityTest(unittest.TestCase):
+    """"Severe" must mean rare *and* large, on both of its paths.
+
+    It did not. The big-discount clause was a bare size test, so KL->Banjarmasin
+    held MYR 259 against a 429 median for eight consecutive days and was
+    labelled SEVERELY UNDERPRICED every one of them, while its percentile
+    climbed 0% -> 5% -> 10% -> 14% -> 17% -> 20% -> 23% -> 26%. By the end a
+    quarter of tracked days carried that price: it was the going rate, not an
+    anomaly.
+
+    Exactly the stale-price-level failure `deal_percentile_guard` fixed on the
+    ordinary path — which survived here because only one path was guarded, and
+    left the stricter label with the looser rarity test.
+    """
+
+    route = Route("KUL", "BDJ", "Banjarmasin")
+    today = date(2026, 9, 2)
+
+    def _severity(self, prices, price_today):
+        deals, _ = find_deals({"KUL-BDJ": [_offer("BDJ", price_today)]},
+                              _history("BDJ", prices), [self.route], _cfg(),
+                              self.today)
+        return deals[0].severity if deals else None
+
+    def test_a_big_discount_on_the_day_it_appears_is_severe(self):
+        # New low against a settled 429 level: rare and large.
+        self.assertEqual(
+            self._severity([429, 429, 442, 429, 442, 429, 429], 259), "severe")
+
+    def test_the_same_fare_once_common_is_no_longer_severe(self):
+        """Eight days in, a quarter of tracked days carry this price."""
+        prices = [429, 442, 429, 442, 429, 259, 259, 259, 259, 259, 259, 259]
+        self.assertNotEqual(self._severity(prices, 259), "severe")
+
+    def test_a_moderate_discount_still_needs_a_new_low(self):
+        # 25-35% off qualifies as severe only on the strongest signal there is.
+        prices = [400, 400, 400, 400, 400, 400, 400]
+        self.assertEqual(self._severity(prices, 290), "severe")   # new low
+        prices_with_low = [290, 400, 400, 400, 400, 400, 400]
+        self.assertNotEqual(self._severity(prices_with_low, 295), "severe")
+
+
+if __name__ == "__main__":
+    unittest.main()
