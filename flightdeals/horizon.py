@@ -12,6 +12,10 @@ Separate from the daily scan on purpose, and the separation is the design:
 * **Compared only when both windows are comparably covered.** Coverage drives
   the bias directly, so a well-covered near window versus a thin far block
   would manufacture a difference out of measurement.
+* **Blocks are anchored to the scan, not to the reader.** The lane is scanned
+  weekly and read daily; recomputing the window from the digest date walked it
+  off the scanned dates a day at a time until coverage fell through the floor
+  and the section vanished. See `scan_anchor`.
 * **Its own store, never pooled with route baselines.** A 150-day fare and a
   20-day fare are different populations; merging them repeats the failure that
   made every one-way look half price when returns shared a baseline.
@@ -136,6 +140,35 @@ def block_dates(starts: List[int], length: int, today: date) -> List[List[str]]:
             for start in sorted(starts)]
 
 
+def scan_anchor(store: HorizonStore, today: date) -> date:
+    """The day the store was last scanned — what its blocks are measured from.
+
+    The far lane is scanned weekly but read every morning, and for a while the
+    reader recomputed ``block_dates(..., today)`` from the *digest* date while
+    the scanner had written ``block_dates(..., scan_date)``. The two windows
+    slide apart a day at a time, so the overlap decays: 83% four days after a
+    scan, 70% at eight days, 57% at twelve. Since the comparison needs 80%
+    coverage on both sides, the "Cheaper if you fly later" section silently
+    stopped appearing about five days into every week — and while it did
+    appear, it was reporting the minimum of a shrinking overlap, which is the
+    coverage bias this lane was rebuilt to avoid.
+
+    It failed the way everything here fails: no error, no empty section to
+    notice, just a quietly missing feature and a min taken over fewer dates
+    than the label claimed. Anchoring to the scan date keeps the window the
+    scanner actually swept, and the freshness floor still ages the whole store
+    out if the weekly job stops running.
+    """
+    observed = [day for by_day in store.values() for day in by_day]
+    if not observed:
+        return today
+    try:
+        anchor = date.fromisoformat(max(observed))
+    except ValueError:
+        return today
+    return min(anchor, today)
+
+
 def _label(dates: List[str]) -> str:
     def short(value: str) -> str:
         d = date.fromisoformat(value)
@@ -176,8 +209,13 @@ def find_bargains(store: HorizonStore, near: Dict[str, tuple], today: date,
         observed = max(fresh)
         latest.setdefault(route_key, {})[departure] = (fresh[observed], observed)
 
+    # Blocks are measured from the day the store was scanned, not from today —
+    # see `scan_anchor`. Recomputing them from the digest date slid the window
+    # off the scanned dates by a day per day.
+    anchor = scan_anchor(store, today)
+
     finds: List[HorizonFind] = []
-    for block in block_dates(block_starts, block_days, today):
+    for block in block_dates(block_starts, block_days, anchor):
         wanted = set(block)
         for route_key, prices in latest.items():
             near_row = near.get(route_key)

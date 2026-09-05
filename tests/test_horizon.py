@@ -95,6 +95,37 @@ class HorizonStoreTest(unittest.TestCase):
         self.assertEqual(len(f), 1)
         self.assertEqual(f[0].price, 280.0)
 
+    def test_the_block_follows_the_scan_not_the_reading_day(self):
+        """The lane is scanned weekly and read daily. If the reader recomputes
+        the window from *today*, it slides off the scanned dates a day at a
+        time — 83% overlap after four days, 70% after eight — and once it drops
+        below the 80% coverage floor the section silently stops appearing.
+
+        This is the failure mode the whole project is built around: no error,
+        just a feature that quietly isn't there any more. So the block is
+        anchored to the day the store was scanned.
+        """
+        scanned_on = date(2026, 8, 16)
+        dates = block_dates(BLOCKS, BLOCK_DAYS, scanned_on)[0]
+        offers = [off("DPS", d, 900.0) for d in dates]
+        offers[15] = off("DPS", dates[15], 280.0)
+        store = record({}, offers, scanned_on.isoformat())
+
+        # Read a full week later: only 23 of 30 dates (77%) fall inside a
+        # window recomputed from the reading day, which is under the floor.
+        eight_days_on = scanned_on + timedelta(days=8)
+        overlap = set(dates) & set(block_dates(BLOCKS, BLOCK_DAYS,
+                                               eight_days_on)[0])
+        self.assertLess(len(overlap) / BLOCK_DAYS, 0.80)
+
+        found = find_bargains(store, near(459.0), eight_days_on,
+                              block_starts=BLOCKS, block_days=BLOCK_DAYS,
+                              min_discount=0.15, min_coverage=0.80,
+                              cities={"KUL-DPS": "Bali"})
+        self.assertEqual(len(found), 1)
+        self.assertEqual((found[0].far_seen, found[0].far_total), (30, 30))
+        self.assertEqual(found[0].price, 280.0)
+
     def test_past_departures_are_pruned(self):
         s = record({}, [off("DPS", "2026-08-01", 100.0)], "2026-07-20")
         self.assertEqual(prune(s, TODAY), {})
