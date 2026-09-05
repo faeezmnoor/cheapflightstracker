@@ -60,7 +60,11 @@ reports a BLOCK, the change is wrong on data that really occurred.
    minimum ~12% too high, at 80% ~3.6%, so the two windows are only compared
    when both clear 80%. Do not merge their stores either: a 150-day fare and a
    20-day fare are different populations, and pooling them repeats invariant
-   2's failure in a new place.
+   2's failure in a new place. **The far blocks are anchored to the day the
+   store was scanned, not to the day it is read.** That lane is scanned weekly
+   and read daily; recomputing the window from the digest date slid it off the
+   scanned dates a day at a time until coverage fell through the 80% floor and
+   the section silently stopped appearing five days into every week.
 7. **`MIN_SAMPLES` is a safety floor, not a tuning knob.** It was once lowered
    to 1 "to get more alerts". 21 of 26 routes alerted the next morning off
    single junk readings.
@@ -127,6 +131,7 @@ that way. Nothing goes in a file, a log line, or a commit message.
 | `qa/` | the independent auditor — must not import `flightdeals` |
 | `scripts/replay_audit.py` | replay recorded days past the auditor |
 | `scripts/check_liveness.py` | did the job run at all? |
+| `scripts/price_lookup.py` | what have we ever seen for a route? (`--all` for every route) |
 | `docs/POSTMORTEMS.md` | every incident, with the check that now catches it |
 | `docs/RUNBOOK.md` | what to do when the digest looks wrong or stops |
 | `docs/COMPETITOR-ANALYSIS.md` | industry techniques surveyed, with a verdict on each |

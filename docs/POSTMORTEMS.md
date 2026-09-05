@@ -269,6 +269,63 @@ that this was a weak reason which did not carry the argument. They were right
 twice — the weak reason was weak, and the real one (a red build that cannot be
 fixed by the person who turned it red) was strong enough on its own.
 
+### 17. The stricter label had the looser rarity test
+**Symptom** — KL→Banjarmasin was headlined **SEVERELY UNDERPRICED** on eight
+consecutive mornings, 26 Aug to 3 Sep, at a steady MYR 259 against a 429
+median.
+**Cause** — incident 11's fix, exactly, in the one place it was not applied.
+`_severity` returned `"severe"` on a bare `discount >= severe_threshold`, with
+no percentile requirement, so a fare that steps down and holds keeps shouting
+until the median catches up. The digest recorded the drift as it happened: the
+percentile printed under that alert climbed 0% → 5% → 10% → 14% → 17% → 20% →
+23% → 26%. By the last morning a quarter of tracked days had been that cheap.
+It was the going rate, announced as an emergency.
+**Why it survived the earlier fix** — `deal_percentile_guard` was added to the
+ordinary path only. Nobody checked whether the severe path had the same hole,
+and it was the *stricter*-sounding label, so it drew less suspicion, not more.
+**Fix** — severe now requires rarity as well as size:
+`discount >= severe_threshold and percentile <= rare_percentile`, or a large
+discount that is also a new low. On the recorded series the first three days
+stay severe; days four through eight downgrade to an ordinary deal.
+**Guarded by** — `SevereRarityTest`, which reconstructs the eight-day
+Banjarmasin series and asserts the label changes as the percentile climbs.
+**Generalised lesson** — when a guard is added to one branch of a decision,
+grep for the other branches. Two paths reaching the same verdict need the same
+evidence.
+
+### 18. The far-horizon section quietly stopped appearing mid-week
+**Symptom** — none, which is the problem. "Cheaper if you fly later" was
+present in the 2-4 Sep digests and would have been absent from 8 Sep onwards,
+with no error, no empty section, and nothing in the run log.
+**Cause** — the lane is scanned **weekly** and read **daily**, and the two used
+different anchors. `horizon_scan.py` swept `block_dates(starts, days,
+scan_date)`; `find_bargains` recomputed `block_dates(starts, days, today)` from
+the *digest* date. The window walked off the scanned dates one day per day.
+Measured against the store written on 30 Aug:
+
+| Digest date | Scanned dates inside the recomputed block | Verdict |
+|---|---|---|
+| 4 Sep | 25/30 (83%) | passes, but min taken over 25 dates |
+| 8 Sep | 21/30 (70%) | fails the 80% floor — section disappears |
+| 12 Sep | 17/30 (57%) | fails |
+
+So the feature had a five-day useful life after each weekly scan, and even
+inside it the comparison was drifting into exactly the coverage bias the lane
+was rebuilt to avoid (invariant 6). It also explains a detail visible in the
+delivered emails and not understood at the time: every find was dated 1 Feb —
+the first day of the shrinking overlap, not a genuinely cheap date.
+**Fix** — `scan_anchor()`. Blocks are measured from the day the store was last
+scanned, so the reader looks at the window the scanner actually swept. The
+21-day freshness floor still ages the whole store out if the weekly job stops,
+which is the correct way for this to go quiet.
+**Effect on real data** — replaying the 30 Aug store against later reading
+days, finds go from 6 → 0 → 0 (at +4/+8/+12 days) to a steady 6 for three
+weeks, at 30/30 coverage instead of 25/30, and two routes that had been cut by
+the drift return.
+**Guarded by** — `test_the_block_follows_the_scan_not_the_reading_day`, which
+asserts the pre-fix overlap is genuinely below the floor before asserting the
+find survives, so it fails on the old code rather than passing vacuously.
+
 ---
 
 ## Resolved: the throttling episode (17-26 Aug)

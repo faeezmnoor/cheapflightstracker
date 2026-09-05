@@ -50,14 +50,20 @@ def _severity(stats: PriceStats, price: float, config: Config,
     if discount < config.min_discount or saving < config.min_saving:
         return None
 
-    # "Severe" has to mean rare *and* large. A z-score alone will not do: a
-    # route sitting at the same fare all week has a minuscule scale, so a 14%
-    # dip scores z = -4.75 and would shout "severely underpriced" about a
-    # saving most travellers would shrug at.
+    # "Severe" has to mean rare *and* large, and for a while it did not. The
+    # first clause used to be a bare discount test, so a fare could be shouted
+    # about on size alone: KL->Banjarmasin held MYR 259 against a 429 median
+    # for eight consecutive days, and was labelled SEVERELY UNDERPRICED every
+    # one of them while its percentile climbed 0% -> 5% -> ... -> 26%. By the
+    # end, a quarter of tracked days had that price. It was the going rate.
+    #
+    # This is the stale-price-level failure that `deal_percentile_guard` fixed
+    # on the ordinary path, and it survived here because only one of the two
+    # paths was guarded. The stricter label had the looser rarity test.
     severe = (
-        discount >= config.severe_threshold
-        or (discount >= config.severe_discount_floor
-            and (is_new_low or percentile <= config.rare_percentile))
+        (discount >= config.severe_threshold
+         and percentile <= config.rare_percentile)
+        or (discount >= config.severe_discount_floor and is_new_low)
     )
     if severe:
         return "severe"
