@@ -21,9 +21,9 @@
       "price": 262.0
     },
     "KUL-DJB": {
-      "date": "2026-08-30",
-      "departure_date": "2026-09-03",
-      "price": 534.0
+      "date": "2026-09-20",
+      "departure_date": "2026-09-21",
+      "price": 514.0
     },
     "KUL-DPS": {
       "date": "2026-09-13",
@@ -41,14 +41,19 @@
       "price": 417.0
     },
     "KUL-LOP": {
-      "date": "2026-09-09",
-      "departure_date": "2026-09-12",
-      "price": 527.0
+      "date": "2026-09-20",
+      "departure_date": "2026-09-21",
+      "price": 593.0
     },
     "KUL-MDC": {
       "date": "2026-08-19",
       "departure_date": "2026-09-15",
       "price": 820.0
+    },
+    "KUL-MLG": {
+      "date": "2026-09-20",
+      "departure_date": "2026-09-21",
+      "price": 556.0
     },
     "KUL-PDG": {
       "date": "2026-09-05",
@@ -81,9 +86,9 @@
       "price": 298.0
     },
     "KUL-TKG": {
-      "date": "2026-08-28",
-      "departure_date": "2026-09-19",
-      "price": 446.0
+      "date": "2026-09-20",
+      "departure_date": "2026-09-29",
+      "price": 426.0
     },
     "KUL-UPG": {
       "date": "2026-09-12",
