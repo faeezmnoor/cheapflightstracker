@@ -41,9 +41,9 @@
       "price": 401.0
     },
     "KUL-LOP": {
-      "date": "2026-09-20",
-      "departure_date": "2026-09-21",
-      "price": 593.0
+      "date": "2026-09-29",
+      "departure_date": "2026-10-27",
+      "price": 495.0
     },
     "KUL-MDC": {
       "date": "2026-09-28",
@@ -76,9 +76,9 @@
       "price": 1180.0
     },
     "KUL-SRG": {
-      "date": "2026-09-08",
-      "departure_date": "2026-09-30",
-      "price": 392.0
+      "date": "2026-09-29",
+      "departure_date": "2026-10-03",
+      "price": 547.0
     },
     "KUL-SUB": {
       "date": "2026-09-28",
