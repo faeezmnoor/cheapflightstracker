@@ -26,9 +26,9 @@
       "price": 514.0
     },
     "KUL-DPS": {
-      "date": "2026-09-22",
-      "departure_date": "2026-10-21",
-      "price": 332.0
+      "date": "2026-09-30",
+      "departure_date": "2026-10-24",
+      "price": 342.0
     },
     "KUL-KNO": {
       "date": "2026-09-08",
@@ -71,14 +71,14 @@
       "price": 237.0
     },
     "KUL-SOQ": {
-      "date": "2026-08-21",
-      "departure_date": "2026-09-18",
-      "price": 1180.0
+      "date": "2026-09-30",
+      "departure_date": "2026-10-22",
+      "price": 1306.0
     },
     "KUL-SRG": {
-      "date": "2026-09-29",
-      "departure_date": "2026-10-03",
-      "price": 547.0
+      "date": "2026-09-30",
+      "departure_date": "2026-10-06",
+      "price": 317.0
     },
     "KUL-SUB": {
       "date": "2026-09-28",
