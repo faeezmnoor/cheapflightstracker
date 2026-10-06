@@ -61,3 +61,13 @@ jobs:
 
       - name: Replay the most recent run past the auditor
         run: python scripts/replay_audit.py --strict
+
+  # Structure and budget lint of the house standard (vendored under .standard/).
+  standard-check:
+    name: standard-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun .standard/standard-check.mjs .
