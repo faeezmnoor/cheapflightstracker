@@ -22,3 +22,11 @@
 
 ## Cold-start answer
 A fresh agent reads AGENTS.md, then STATE.md. Cold-start question: what must I not do before changing the detector, and how do I know I am done? Answer from the files: do not rely on green unit tests; run `python scripts/replay_audit.py --all` and treat a BLOCK as wrong (AGENTS.md §6 rule 11), never hand-edit the three data files or import flightdeals from qa/ (§4), and done is `python3 -m unittest discover -s tests` exit 0 plus the replay audit, with STATE.md updated (§7). The reason behind each rule is one link away in docs/lessons.md.
+
+## Rebase round
+- Rebased the 11 slice commits onto upstream commits 550fe9b and ee687e1. One conflict, CLAUDE.md in the "Adopt AGENTS.md" commit; resolved by keeping the pointer version. (verified)
+- docs/POSTMORTEMS.md follow-through: git carried upstream's incidents 17 and 18 through the rename into docs/records/postmortems.md with no conflict; the file differs from upstream's only by the records header and the earlier path-only link fix. (verified by diff)
+- Carried into AGENTS.md: the scan-anchor extension of invariant 6 as its own rule 14, and the `scripts/price_lookup.py` row in the §8 map. The full upstream paragraph went verbatim into docs/lessons.md under invariant 6. (verified by grep)
+- Added L-20 (incident 17) and L-21 (incident 18) to docs/lessons.md; L-18's "where it lives" now names rule 14. Chose the next free ids, and the L-21 citation on invariant 6 is my reading of "cites it". (inferred)
+- Rule 14 was appended after rule 13 rather than inserted after rule 6, so existing rule numbers cited in lessons.md stay valid. (inferred)
+- Carried content went in a separate commit, plus the AGENTS.md carry folded into the conflicted "Adopt AGENTS.md" commit. data/, flightdeals/, tests/, scripts/ are identical to upstream. (verified by diff)
