@@ -228,7 +228,7 @@ Two things worth knowing before changing how fares are scored:
 - **Every past bug has a regression test** naming the incident it reproduces.
   Start there.
 
-[`CLAUDE.md`](CLAUDE.md) carries the invariants, each written after breaking one.
+[`AGENTS.md`](AGENTS.md) carries the invariants, each written after breaking one.
 [`docs/runbooks/digest.md`](docs/runbooks/digest.md) is what to do when a digest looks wrong, and
 [`docs/research/competitor-analysis.md`](docs/research/competitor-analysis.md) records which industry
 techniques were adopted, rejected, and why — including two rejected on

@@ -79,7 +79,7 @@ python scripts/replay_audit.py --date YYYY-MM-DD
 ```
 
 A `BLOCK` names the problem directly. The checks and what each means are listed
-in `docs/POSTMORTEMS.md`.
+in `docs/records/postmortems.md`.
 
 To see the exact email that was sent, download the `digest` artifact from that
 day's run (30-day retention). It contains the rendered HTML and the payload the
@@ -122,7 +122,7 @@ Or use the `verify-release` skill, which runs all of it and knows what the
 warnings mean.
 
 **Green unit tests are not evidence of correctness.** They were green for every
-incident in `docs/POSTMORTEMS.md`.
+incident in `docs/records/postmortems.md`.
 
 ### Adding a destination
 

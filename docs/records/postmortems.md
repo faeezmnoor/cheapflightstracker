@@ -106,7 +106,7 @@ between 02:55 and 04:16 UTC against a 01:00 cron; 03:00 UTC is earlier than
 five of the eight recorded firings. The evidence at the time ("no run yet")
 was equally consistent with "delayed" and "deregistered", and the wrong one
 was chosen with more confidence than the evidence supported.
-**Fix** — the delay is documented in `CLAUDE.md` and `docs/RUNBOOK.md` with a
+**Fix** — the delay is documented in `CLAUDE.md` and `docs/runbooks/digest.md` with a
 "do not declare it missing before 05:00 UTC" rule; the liveness watchdog moved
 from 04:00 to 06:00 UTC, since at 04:00 it would have called the 6 Aug run
 (fired 04:16) missing while it was still running.
