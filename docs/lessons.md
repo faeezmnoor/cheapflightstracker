@@ -3,7 +3,7 @@
 
 Every AGENTS.md §6 rule links here or to a decision. A lesson without a home is not yet applied.
 
-The pattern across all of them: not one of these crashed. Each produced a digest that arrived on time, rendered correctly and read plausibly, with exit code 0 and green tests. The full narrative of L-01 to L-16 is in docs/records/postmortems.md (same numbering as its "Shipped defects" entries). Dates are the date each was found, where the record states one; "2026-08" means found in August 2026 without a recorded day.
+The pattern across all of them: not one of these crashed. Each produced a digest that arrived on time, rendered correctly and read plausibly, with exit code 0 and green tests. The full narrative of L-01 to L-16 is in docs/records/postmortems.md (same numbering as its "Shipped defects" entries; L-20 and L-21 are its incidents 17 and 18). Dates are the date each was found, where the record states one; "2026-08" means found in August 2026 without a recorded day.
 
 | Id | Date | What happened | Cost | The rule | Where the rule lives |
 | --- | --- | --- | --- | --- | --- |
@@ -24,8 +24,10 @@ The pattern across all of them: not one of these crashed. Each produced a digest
 | L-15 | 2026-08 | A log line reported the opposite of what happened: `retried 60 empty search(es)` on a provider that never retries. | A diagnosing human would have concluded the retry was useless and removed it. | Count what was actually done, never infer it by subtraction; a log line stating the opposite of what happened is worse than none. | the retry counter in the search path |
 | L-16 | 2026-08 | CI answered two questions with one red X: `replay_audit.py --strict` failed on data-health `WARN` findings that no pusher could fix. | Every push red from 17 Aug; a permanently red build is a build nobody reads. | `BLOCK` always fails; a code `WARN` (`C*`) fails under `--strict`; a data `WARN` (`D*`) never gates a push. Every check needs a test reconstructing its failure, and the clean-digest test must still pass. | AGENTS.md §6 rule 13; tests on check classification; liveness watchdog |
 | L-17 | carried over | A fare must not help set the standard it is judged against (no incident recorded in the postmortems). | Not recorded. | A baseline only ever uses observations from strictly before the run date. | AGENTS.md §6 rule 3 |
-| L-18 | carried over | The far-horizon lane was sampled once and could not support its own conclusion. | 10 of 30 dates missed the true cheapest fare 41% of the time and read a mean 13.9% high, the same size as the discount it existed to detect. | The far-horizon lane is exhaustive within each of its two 30-day blocks; coverage is the bias; never merge the stores. | AGENTS.md §6 rule 6 |
+| L-18 | carried over | The far-horizon lane was sampled once and could not support its own conclusion. | 10 of 30 dates missed the true cheapest fare 41% of the time and read a mean 13.9% high, the same size as the discount it existed to detect. | The far-horizon lane is exhaustive within each of its two 30-day blocks; coverage is the bias; never merge the stores. | AGENTS.md §6 rules 6 and 14 |
 | L-19 | carried over | `qa/` deliberately re-implements the statistics rather than importing them. | Not recorded. | Do not "clean this up" by having `qa/` import from `flightdeals/`. | AGENTS.md §4 and §6 rule 12 |
+| L-20 | 2026-09 | The stricter label had the looser rarity test: `_severity` returned "severe" on a bare discount threshold with no percentile requirement, so KL to Banjarmasin was headlined SEVERELY UNDERPRICED on eight consecutive mornings at a steady MYR 259 against a 429 median. | Eight mornings of the going rate announced as an emergency; the percentile under the alert climbed 0% to 26% while it shouted. | Severe requires rarity as well as size; when a guard is added to one branch of a decision, grep for the other branches, because two paths reaching the same verdict need the same evidence. | the severity path in `flightdeals/` (`discount >= severe_threshold and percentile <= rare_percentile`, or a large discount that is also a new low); `SevereRarityTest`; docs/records/postmortems.md incident 17 |
+| L-21 | 2026-09 | The far-horizon section quietly stopped appearing mid-week: the weekly scan swept blocks from the scan date but `find_bargains` recomputed them from the digest date, so the window walked off the scanned dates one day per day. | No error and no empty section; the feature had a five-day useful life after each weekly scan (83% coverage on day 4, 70% on day 8, 57% on day 12), and finds were drifting toward coverage bias (every find dated 1 Feb). | Far-horizon blocks are anchored to the day the store was scanned (`scan_anchor()`), never to the digest date; the 21-day freshness floor ages the store out if the weekly job stops. | AGENTS.md §6 rule 14; `test_the_block_follows_the_scan_not_the_reading_day`; docs/records/postmortems.md incident 18 |
 
 ## Verbatim explanations carried over from the former CLAUDE.md
 
@@ -82,7 +84,11 @@ reports a BLOCK, the change is wrong on data that really occurred.
    minimum ~12% too high, at 80% ~3.6%, so the two windows are only compared
    when both clear 80%. Do not merge their stores either: a 150-day fare and a
    20-day fare are different populations, and pooling them repeats invariant
-   2's failure in a new place. (L-03, L-18)
+   2's failure in a new place. **The far blocks are anchored to the day the
+   store was scanned, not to the day it is read.** That lane is scanned weekly
+   and read daily; recomputing the window from the digest date slid it off the
+   scanned dates a day at a time until coverage fell through the 80% floor and
+   the section silently stopped appearing five days into every week. (L-03, L-18, L-21)
 7. **`MIN_SAMPLES` is a safety floor, not a tuning knob.** It was once lowered
    to 1 "to get more alerts". 21 of 26 routes alerted the next morning off
    single junk readings. (L-06)
