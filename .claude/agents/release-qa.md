@@ -46,7 +46,7 @@ grep -o "maps/search" artifacts/digest.html | wc -l   # -o, not -c: several link
 
 ## Review against the incident history
 
-`docs/POSTMORTEMS.md` is the authoritative list. Every entry is a real failure,
+`docs/records/postmortems.md` is the authoritative list. Every entry is a real failure,
 and each names the check that now guards it. For any diff, ask which of these
 it could reintroduce:
 

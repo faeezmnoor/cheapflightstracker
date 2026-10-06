@@ -92,7 +92,7 @@ email is indistinguishable from a quiet morning, which is how several incidents 
 unnoticed for days.
 
 Fifteen checks, each traceable to a real incident in
-[`docs/POSTMORTEMS.md`](docs/POSTMORTEMS.md). Two are worth singling out, because
+[`docs/records/postmortems.md`](docs/records/postmortems.md). Two are worth singling out, because
 they guard the failure this data source actually has:
 
 > The provider answers a **throttled** request with HTTP 200 and an empty itinerary
@@ -223,14 +223,14 @@ network, so `python -m unittest discover -s tests` runs in well under a second.
 Two things worth knowing before changing how fares are scored:
 
 - **A green test suite is not evidence.** It was green for every incident in
-  [`docs/POSTMORTEMS.md`](docs/POSTMORTEMS.md). Run
+  [`docs/records/postmortems.md`](docs/records/postmortems.md). Run
   `python scripts/replay_audit.py --all` — that is the check that catches things.
 - **Every past bug has a regression test** naming the incident it reproduces.
   Start there.
 
-[`CLAUDE.md`](CLAUDE.md) carries the invariants, each written after breaking one.
-[`docs/RUNBOOK.md`](docs/RUNBOOK.md) is what to do when a digest looks wrong, and
-[`docs/COMPETITOR-ANALYSIS.md`](docs/COMPETITOR-ANALYSIS.md) records which industry
+[`AGENTS.md`](AGENTS.md) carries the invariants, each written after breaking one.
+[`docs/runbooks/digest.md`](docs/runbooks/digest.md) is what to do when a digest looks wrong, and
+[`docs/research/competitor-analysis.md`](docs/research/competitor-analysis.md) records which industry
 techniques were adopted, rejected, and why — including two rejected on
 measurements of this project's own data.
 
@@ -247,7 +247,7 @@ measurements of this project's own data.
   not implemented: it breaches essentially every carrier's contract, enforcement
   lands on the passenger's account and miles, and on short-haul point-to-point
   routes like these the upside is close to zero. Reasoning in
-  [`docs/COMPETITOR-ANALYSIS.md`](docs/COMPETITOR-ANALYSIS.md).
+  [`docs/research/competitor-analysis.md`](docs/research/competitor-analysis.md).
 - **Always confirm before booking.** An alert is a prompt to look, not a quote.
 
 ## License
