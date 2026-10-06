@@ -1,6 +1,6 @@
 # STATE — cheapflightstracker
 <!-- layer: state · status: living · budget: 80 lines -->
-verified: 2026-10-06 at 00d548a by bun .standard/standard-check.mjs . exit 0 and python3 -m unittest discover -s tests OK (125 tests)
+verified: 2026-10-06 at bf18c71 by unittest OK (125 tests), bun .standard/standard-check.mjs . (0 FAIL), gates G3-G5 (exit 0), reviewer cold-start (pass)
 
 ## Now
 - Live: the daily digest runs on GitHub Actions (CI badge in README.md); last known behaviour: scheduled runs fire 115 to 196 minutes after the 01:00 UTC cron, never on time (docs/lessons.md L-08).
