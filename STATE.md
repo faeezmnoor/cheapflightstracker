@@ -1,8 +1,9 @@
 # STATE — cheapflightstracker
 <!-- layer: state · status: living · budget: 80 lines -->
-verified: 2026-10-06 at ea439db (rebased on upstream ee687e1) by unittest OK (129 tests), bun .standard/standard-check.mjs . (0 FAIL), gates G3-G5 (exit 0), AGENTS.md 71 lines, nothing-lost greps and diff
+verified: 2026-10-06 at ccb73b7 by CI on PR #3 (test 3.10 and 3.11, audit-replay, standard-check all green) and the reviewer cold-start test (pass)
 
 ## Now
+- Adopted the house standard at Minimal tier (PR #3, merged 2026-10-06): AGENTS.md carries every invariant; lessons register and records; CI lint required on the default branch.
 - Live: the daily digest runs on GitHub Actions (CI badge in README.md); last known behaviour: scheduled runs fire 115 to 196 minutes after the 01:00 UTC cron, never on time (docs/lessons.md L-08).
 - Built, not merged: slice 001-adopt-standard (branch slice/001-adopt-standard): AGENTS.md, lessons register, moved docs, standard-check CI job.
 
@@ -20,8 +21,7 @@ Nothing planned.
 None.
 
 ## Measurements
-<!-- filled by the orchestrator at CLOSE from the harness figures; builders leave this table alone -->
 | Slice | Builder tokens | Reviewer tokens | Fix rounds |
 | --- | --- | --- | --- |
-| 001-adopt-standard | | | |
-Owner minutes this week: . Last cold-start test: .
+| 001-adopt-standard | ~90k + ~71k (build, rebase-and-carry) | ~78k | 0 (path fixes only) |
+Owner minutes this week: 0. Last cold-start test: 2026-10-06, pass (independent reviewer).
