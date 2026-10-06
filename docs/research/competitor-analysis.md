@@ -1,3 +1,4 @@
+<!-- layer: knowledge · status: living · verified: 2026-10-06 -->
 # How the industry finds cheap flights, and which of it applies here
 
 A survey of the techniques used by Skiplagged, Kiwi, Going, Secret Flying,

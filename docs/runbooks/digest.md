@@ -1,3 +1,4 @@
+<!-- layer: knowledge · status: living · verified: 2026-10-06 -->
 # Runbook
 
 What to do when the digest misbehaves. Written so it works at 9am before

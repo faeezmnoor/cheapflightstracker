@@ -1,3 +1,4 @@
+<!-- layer: records · status: record · verified: 2026-10-06 -->
 # Incidents, and what now catches them
 
 Every defect this project has shipped, the check that guards it today, and the
