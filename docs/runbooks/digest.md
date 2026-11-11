@@ -1,4 +1,4 @@
-<!-- layer: knowledge · status: living · verified: 2026-10-06 -->
+<!-- layer: knowledge · status: living · verified: 2026-11-11 -->
 # Runbook
 
 What to do when the digest misbehaves. Written so it works at 9am before
@@ -6,6 +6,24 @@ coffee, and so the diagnosis does not depend on remembering how the service is
 put together.
 
 ---
+
+## When to use
+- The daily digest email is missing, late or looks wrong, or before pushing a change to detection, statistics, baselines or the email.
+
+## Preconditions
+- Read access to the repository's Actions tab. For the local commands: Python 3.10+ and `pip install -r requirements.txt`. No secret is needed to diagnose; never paste one into a log, file or commit message.
+
+## Steps
+- Missing email: "No email arrived", in order, stopping at the first step that explains it. Wrong email: "The email looks wrong". Before any push: "Routine maintenance".
+
+## Verification
+- `python3 -m unittest discover -s tests`, `python3 run.py --provider mock --dry-run` and `python3 scripts/replay_audit.py --all`: the first two exit 0 (the replay audit currently exits 2 on the recorded 2026-09-26 day; see STATE.md); after a fix, a `schedule` run appears the next morning (a manual run does not prove the cron is registered).
+
+## Rollback
+- Revert the change through a pull request; do not hand-edit the bot-owned files in `data/`. For a deregistered cron, see "Renaming the default branch".
+
+## Last run
+- 2026-11-11: the unit tests and the dry run exited 0 on the default branch head; the replay audit exits 2 on recorded data from 2026-09-26 (BLOCK C2), the same as before this change.
 
 ## No email arrived
 
