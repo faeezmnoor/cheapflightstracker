@@ -17,7 +17,7 @@ put together.
 - Missing email: "No email arrived", in order, stopping at the first step that explains it. Wrong email: "The email looks wrong". Before any push: "Routine maintenance".
 
 ## Verification
-- `python3 -m unittest discover -s tests`, `python3 run.py --provider mock --dry-run` and `python3 scripts/replay_audit.py --all` the first two exit 0 (the replay audit currently exits 2 on the recorded 2026-09-26 day; see STATE.md); after a fix, a `schedule` run appears the next morning (a manual run does not prove the cron is registered).
+- `python3 -m unittest discover -s tests`, `python3 run.py --provider mock --dry-run` and `python3 scripts/replay_audit.py --all`: the first two exit 0 (the replay audit currently exits 2 on the recorded 2026-09-26 day; see STATE.md); after a fix, a `schedule` run appears the next morning (a manual run does not prove the cron is registered).
 
 ## Rollback
 - Revert the change through a pull request; do not hand-edit the bot-owned files in `data/`. For a deregistered cron, see "Renaming the default branch".
