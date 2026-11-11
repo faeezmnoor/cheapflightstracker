@@ -69,5 +69,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the lint reads the verified commit (T2)
       - uses: oven-sh/setup-bun@v2
       - run: bun .standard/standard-check.mjs .
