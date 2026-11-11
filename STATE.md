@@ -1,6 +1,6 @@
 # STATE — cheapflightstracker
 <!-- layer: state · status: living · budget: 80 lines -->
-verified: 2026-10-06 at ccb73b7 by CI on PR #3 (test 3.10 and 3.11, audit-replay, standard-check all green) and the reviewer cold-start test (pass)
+verified: 2026-11-11 at 5abe8d2 by the unit tests, dry run and replay audit exit 0, the unfiltered CI run list read (service unhealthy, see Now), and the 1.6.0 lint at 0 FAIL, 0 WARN
 
 ## Now
 - Standard 1.6.0 re-applied 2026-11-11 (lint bundle, declared version, harness-audit line in the AGENTS.md header, runbook sections, specialists trimmed into docs/references/, public-address declaration in docs/workflow.md); local audit in docs/records/audit-2026-11.md. Pending the pull request.
