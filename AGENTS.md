@@ -1,5 +1,5 @@
 # AGENTS.md — cheapflightstracker
-<!-- standard: 1.1.2 · tier: minimal · ui: no · db: no · verified: 2026-10-06 -->
+<!-- standard: 1.6.0 · tier: minimal · ui: no · db: no · verified: 2026-11-11 · audit: last 2026-11-11 · next 2027-05-11 -->
 
 ## 1. What this is
 - A daily job scrapes KL→Indonesia fares, decides which are unusually cheap, and emails a digest to its owner.
@@ -64,6 +64,7 @@
 | `scripts/price_lookup.py` | what have we ever seen for a route? (`--all` for every route) |
 | `tests/` | unit tests (`python3 -m unittest discover -s tests`) |
 | `data/` | bot-owned price history and alert state |
+| `docs/workflow.md` | the specialists, their references (`docs/references/`) and the public-address declaration |
 | `docs/lessons.md` | every incident, the rule it produced, where the rule lives |
 | `docs/runbooks/digest.md` | what to do when the digest looks wrong or stops |
 | `docs/research/competitor-analysis.md` | industry techniques surveyed, with a verdict on each |
