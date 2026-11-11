@@ -1,6 +1,6 @@
 # STATE — cheapflightstracker
 <!-- layer: state · status: living · budget: 80 lines -->
-verified: 2026-11-11 at 5abe8d2 by the unit tests, dry run and replay audit exit 0, the unfiltered CI run list read (service unhealthy, see Now), and the 1.6.0 lint at 0 FAIL, 0 WARN
+verified: 2026-11-11 at 5abe8d2 by the unit tests and dry run exit 0 (the replay audit exits 2 on recorded data, see Blocked), the unfiltered CI run list read (service unhealthy, see Now), and the 1.6.0 lint at 0 FAIL, 0 WARN
 
 ## Now
 - Standard 1.6.0 re-applied 2026-11-11 (lint bundle, declared version, harness-audit line in the AGENTS.md header, runbook sections, specialists trimmed into docs/references/, public-address declaration in docs/workflow.md); local audit in docs/records/audit-2026-11.md. Pending the pull request.
@@ -13,6 +13,8 @@ verified: 2026-11-11 at 5abe8d2 by the unit tests, dry run and replay audit exit
 ## Blocked
 - Bot data commits rejected by branch protection (above). Not fixed here: it is a repository setting and workflow change.
 - Stale path references left in place by the path-only scope: `.github/workflows/liveness.yml` line 13 still names docs/POSTMORTEMS.md or docs/RUNBOOK.md (workflow code, out of scope for a documentation pass).
+
+- `python3 scripts/replay_audit.py --all` exits 2 on recorded data, identically before and after this change: 2026-09-26 is a BLOCK (C2, 8 alerts on 26 routes) in the recorded history. AGENTS.md makes it required only when the detector, statistics, baselines or emailer change; the owner decides whether to keep that day as a known case.
 
 ## Direction in force
 - Public portfolio repository under the MIT licence. The default branch is `claude/cheapflightstracker`, not main; scheduled workflows register against it.
