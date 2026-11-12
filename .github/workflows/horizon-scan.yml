@@ -89,7 +89,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # The data commit below is pushed with a deploy key, which the default
+      # branch's ruleset lets past the required checks (lesson L-22).
       - uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.DATA_DEPLOY_KEY }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"

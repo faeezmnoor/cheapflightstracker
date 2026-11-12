@@ -82,7 +82,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # The data commit below is pushed with a deploy key, which the default
+      # branch's ruleset lets past the required checks; GITHUB_TOKEN cannot be
+      # given that bypass on a personal repository (lesson L-22).
       - uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.DATA_DEPLOY_KEY }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
