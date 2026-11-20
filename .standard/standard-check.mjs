@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 // @bun
-// standard-check-version: 1.6.0
+// standard-check-version: 1.7.0
 
 // scripts/standard-check.ts
 import { resolve, join as join4 } from "path";
 import { existsSync as existsSync3, statSync as statSync3, readFileSync as readFileSync3 } from "fs";
 
 // scripts/lib/version.ts
-var EMBEDDED_VERSION = "1.6.0";
+var EMBEDDED_VERSION = "1.7.0";
 
 // scripts/lib/common.ts
 import { existsSync, lstatSync, readFileSync, readdirSync, statSync } from "fs";
@@ -378,6 +378,30 @@ function structure(p) {
 
 // scripts/lib/budgets.ts
 import { statSync as statSync2 } from "fs";
+
+// scripts/lib/git.ts
+function git(p) {
+  if (!p.exists(".git"))
+    return null;
+  const run = (...a) => {
+    const r = Bun.spawnSync(["git", "-C", p.root, ...a]);
+    return r.exitCode === 0 ? r.stdout.toString().trim() : null;
+  };
+  return {
+    commitExists: (h) => run("cat-file", "-e", `${h}^{commit}`) !== null,
+    behind: (h) => {
+      const heads = (run("for-each-ref", "--format=%(symref)", "refs/remotes/*/HEAD") ?? "").split(`
+`).filter(Boolean);
+      const def = ["refs/remotes/origin/main", "refs/remotes/backup/main", ...heads].find((r) => run("rev-parse", "--verify", "-q", `${r}^{commit}`) !== null);
+      const n = run("rev-list", "--count", `${h}..${def ?? "HEAD"}`);
+      return n === null ? null : Number(n);
+    },
+    headDate: () => run("log", "-1", "--format=%cs"),
+    headMessage: () => run("log", "-1", "--format=%s")
+  };
+}
+
+// scripts/lib/budgets.ts
 var FILE_BUDGETS = [
   [/^AGENTS\.md$/, 150],
   [/^CLAUDE\.md$/, 20],
@@ -397,6 +421,7 @@ var FILE_BUDGETS = [
   [/^docs\/slices\/[^_][^/]*\/tasks\.md$/, 150],
   [/^docs\/slices\/[^_][^/]*\/epic\.md$/, 150]
 ];
+var READ_FIRST_FAIL_FROM = "2026-12-14";
 var AGENTS_SECTIONS = { "1": 5, "2": 15, "3": 8, "4": 15, "5": 10, "6": 25, "7": 10, "8": 15 };
 var STATE_SECTIONS = { now: 15, next: 10, blocked: 10, "direction in force": 10, "owner items": 15, measurements: 10 };
 var BRIEF_SECTIONS = {
@@ -461,7 +486,7 @@ function checkSections(p, file, rule, budgets, key) {
       p.add(file, s.line, rule, "FAIL", `section "${s.key}" has ${s.n} lines, budget ${budgets[s.key]}`);
 }
 var byPrefix = (b) => (h) => Object.keys(b).find((k) => h.toLowerCase().startsWith(k)) ?? null;
-function budgets(p) {
+function budgets(p, chainClock = () => new Date) {
   for (const f of ["AGENTS.md", "CLAUDE.md", "STATE.md", "DESIGN.md", ...p.walk("docs").filter((x) => x.endsWith(".md"))]) {
     const hit = FILE_BUDGETS.find(([re]) => re.test(f));
     if (hit && p.lines(f) > hit[1])
@@ -488,6 +513,9 @@ function budgets(p) {
   const chain = chainFiles.filter((f) => !unscoped.includes(f)).reduce((n, f) => n + p.lines(f), ruleLines);
   if (chain > 600)
     p.add("AGENTS.md", 1, "B5", "FAIL", `read-first chain is ${chain} lines, budget 600${slice ? ` (current slice ${slice.split("/")[2]})` : ""}`);
+  const chainAsOf = git(p)?.headDate() ?? chainClock().toISOString().slice(0, 10);
+  const chainLevel = chainAsOf >= READ_FIRST_FAIL_FROM ? "FAIL" : "WARN";
+  const chainWhen = chainLevel === "WARN" ? `; it fails from ${READ_FIRST_FAIL_FROM}` : "";
   let words = 0;
   for (const f of chainFiles.filter((x) => p.exists(x))) {
     const text = p.read(f);
@@ -496,11 +524,11 @@ function budgets(p) {
 `).forEach((l, i) => {
       const n = [...l].length;
       if (n > 600)
-        p.add(f, i + 1, "B8", "WARN", `line of ${n} characters in a read-first file, budget 600`);
+        p.add(f, i + 1, "B8", chainLevel, `line of ${n} characters in a read-first file, budget 600${chainWhen}`);
     });
   }
   if (words > 6000)
-    p.add("AGENTS.md", 1, "B9", "WARN", `read-first chain is ${words} words, budget 6,000`);
+    p.add("AGENTS.md", 1, "B9", chainLevel, `read-first chain is ${words} words, budget 6,000${chainWhen}`);
 }
 function currentSlice(p) {
   const dirs = p.walk("docs/slices").map((f) => f.split("/")[2]).filter((d, i, a) => !d.startsWith("_") && a.indexOf(d) === i).filter((d) => p.exists(`docs/slices/${d}/brief.md`));
@@ -569,6 +597,7 @@ function anchors(text) {
 }
 function links(p, files) {
   for (const rel of files) {
+    const level = inert(rel) ? "WARN" : "FAIL";
     for (const { t, n } of prose(p.read(rel))) {
       for (const m of t.replace(/`[^`]*`/g, "").matchAll(LINK)) {
         const [path, frag] = m[1].split("#");
@@ -576,11 +605,11 @@ function links(p, files) {
           continue;
         const target = path ? normalize(join3(dirname(rel), decodeURI(path.split("?")[0]))) : rel;
         if (target.startsWith("..") || !p.exists(target)) {
-          p.add(rel, n, "H2", "FAIL", `dead link: ${m[1]} (no such file)`);
+          p.add(rel, n, "H2", level, `dead link: ${m[1]} (no such file)`);
           continue;
         }
         if (frag && target.endsWith(".md") && !anchors(p.read(target)).has(frag.toLowerCase()))
-          p.add(rel, n, "H2", "FAIL", `dead link: ${m[1]} (no heading "${frag}" in ${target})`);
+          p.add(rel, n, "H2", level, `dead link: ${m[1]} (no heading "${frag}" in ${target})`);
       }
     }
   }
@@ -960,28 +989,6 @@ function entry(p) {
   }
 }
 var nested = (p) => p.walk(".", SKIP_DIRS).filter((f) => f.endsWith("/AGENTS.md") && !inert(f));
-
-// scripts/lib/git.ts
-function git(p) {
-  if (!p.exists(".git"))
-    return null;
-  const run = (...a) => {
-    const r = Bun.spawnSync(["git", "-C", p.root, ...a]);
-    return r.exitCode === 0 ? r.stdout.toString().trim() : null;
-  };
-  return {
-    commitExists: (h) => run("cat-file", "-e", `${h}^{commit}`) !== null,
-    behind: (h) => {
-      const heads = (run("for-each-ref", "--format=%(symref)", "refs/remotes/*/HEAD") ?? "").split(`
-`).filter(Boolean);
-      const def = ["refs/remotes/origin/main", "refs/remotes/backup/main", ...heads].find((r) => run("rev-parse", "--verify", "-q", `${r}^{commit}`) !== null);
-      const n = run("rev-list", "--count", `${h}..${def ?? "HEAD"}`);
-      return n === null ? null : Number(n);
-    },
-    headDate: () => run("log", "-1", "--format=%cs"),
-    headMessage: () => run("log", "-1", "--format=%s")
-  };
-}
 
 // scripts/lib/state.ts
 var VERIFIED = /^verified:\s*(\d{4}-\d\d-\d\d) at ([0-9a-f]{7,40}) by (\S.*?)\s*(?:<!--.*)?$/;
