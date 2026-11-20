@@ -16,9 +16,9 @@
       "price": 236.0
     },
     "KUL-BTJ": {
-      "date": "2026-11-13",
-      "departure_date": "2026-11-16",
-      "price": 171.0
+      "date": "2026-11-20",
+      "departure_date": "2026-12-02",
+      "price": 168.0
     },
     "KUL-CGK": {
       "date": "2026-11-16",
@@ -86,9 +86,9 @@
       "price": 317.0
     },
     "KUL-SUB": {
-      "date": "2026-11-16",
-      "departure_date": "2026-11-23",
-      "price": 310.0
+      "date": "2026-11-20",
+      "departure_date": "2026-12-12",
+      "price": 242.0
     },
     "KUL-TKG": {
       "date": "2026-09-20",
