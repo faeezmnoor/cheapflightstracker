@@ -1,8 +1,9 @@
 # STATE — cheapflightstracker
 <!-- layer: state · status: living · budget: 80 lines -->
-verified: 2026-11-14 at efe46d6 by git log on the default branch (bot commit efe46d6, 2026-11-13 08:11 UTC), gh run list (daily run 2026-11-13 success; liveness watchdog 2026-11-13 success), gh api (ruleset active, classic protection absent)
+verified: 2026-11-20 at 448e95a by gh run list (daily run 2026-11-19 08:32 UTC success; liveness watchdog 2026-11-19 14:54 UTC success; CI on pull request 8 pass), python3 -m unittest (129 tests, OK), the 1.7.0 lint at 0 FAIL, 0 WARN
 
 ## Now
+- Standard 1.7.0 re-applied 2026-11-20 (pull request 8, 448e95a): lint bundle and declared version; no line-length or chain-length rows, so nothing changes on 2026-12-14.
 - Standard 1.6.0 re-applied 2026-11-11 (pull request 5): lint bundle, declared version, harness-audit line, runbook sections, specialists trimmed into docs/references/; local audit in docs/records/audit-2026-11.md.
 - Data commits work again. The service saved no fare history from 2026-10-06 to 2026-11-12 because the October branch protection rejected the workflows' data commits (lesson L-22). Since pull request 6 (2026-11-12) the daily and horizon workflows push with a deploy key (secret `DATA_DEPLOY_KEY`) and a branch ruleset keeps the four required checks for pull requests while letting that key through. Confirmed on 2026-11-13: the scheduled daily run committed fare history (efe46d6) and the liveness watchdog passed. The five weeks of history are not recoverable.
 - The daily digest still runs on GitHub Actions; scheduled runs fire 115 to 196 minutes after the 01:00 UTC cron (docs/lessons.md L-08).
