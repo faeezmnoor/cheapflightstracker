@@ -1,5 +1,5 @@
 # AGENTS.md — cheapflightstracker
-<!-- standard: 1.6.0 · tier: minimal · ui: no · db: no · verified: 2026-11-11 · audit: last 2026-11-11 · next 2027-05-11 -->
+<!-- standard: 1.7.0 · tier: minimal · ui: no · db: no · verified: 2026-11-20 · audit: last 2026-11-11 · next 2027-05-11 -->
 
 ## 1. What this is
 - A daily job scrapes KL→Indonesia fares, decides which are unusually cheap, and emails a digest to its owner.
